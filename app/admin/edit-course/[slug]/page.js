@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { ChevronLeft, ChevronDown, PlayCircle, Plus, X, Upload, ClipboardList, CheckCircle2 } from 'lucide-react';
+import { ChevronLeft, ChevronDown, PlayCircle, Plus, X, Upload, ClipboardList, CheckCircle2, ArrowUp, ArrowDown } from 'lucide-react';
 import { supabase } from '@/utils/supabase';
 import { fetchYoutubeVideoDuration } from '../../add-course/actions';
 
@@ -208,6 +208,15 @@ export default function AdminEditCoursePage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleCurrencyInput = (field, value) => {
+    const numeric = value.replace(/\D/g, '');
+    if (!numeric) {
+      updateField(field, '');
+      return;
+    }
+    updateField(field, `Rs. ${Number(numeric).toLocaleString('en-US')}`);
+  };
+
   const handleCategoryInput = (value) => {
     updateField('category', value);
     setCategoryDropdownOpen(true);
@@ -339,13 +348,33 @@ export default function AdminEditCoursePage() {
     }));
   };
 
+  const removeLecture = (index) => {
+    const newLectures = [...form.lectures];
+    newLectures.splice(index, 1);
+    setForm((prev) => ({ ...prev, lectures: newLectures }));
+  };
+
+  const moveLectureUp = (index) => {
+    if (index === 0) return;
+    const newLectures = [...form.lectures];
+    const temp = newLectures[index - 1];
+    newLectures[index - 1] = newLectures[index];
+    newLectures[index] = temp;
+    setForm((prev) => ({ ...prev, lectures: newLectures }));
+  };
+
+  const moveLectureDown = (index) => {
+    if (index === form.lectures.length - 1) return;
+    const newLectures = [...form.lectures];
+    const temp = newLectures[index + 1];
+    newLectures[index + 1] = newLectures[index];
+    newLectures[index] = temp;
+    setForm((prev) => ({ ...prev, lectures: newLectures }));
+  };
+
   const validateForm = () => {
-    if (!form.name || !form.slug || !form.description || !form.level || !form.category || !form.instructor || !form.instructorIntro || !form.price) {
+    if (!form.name || !form.slug || !form.description || !form.level || !form.category || !form.instructor || !form.price) {
       setError('Please fill all required course fields.');
-      return false;
-    }
-    if (!isKnownInstructor) {
-      setError('Please select a registered teacher from the dropdown.');
       return false;
     }
     if (form.lectures.length < 1) {
@@ -370,6 +399,23 @@ export default function AdminEditCoursePage() {
     setSuccess('');
 
     try {
+      // Fetch instructor details from users table
+      let finalInstructorIntro = form.instructorIntro;
+      let finalInstructorImage = form.instructorImage;
+      if (form.instructor) {
+        const { data: teacherData } = await supabase
+          .from('users')
+          .select('intro, image')
+          .eq('full_name', form.instructor)
+          .eq('role', 'teacher')
+          .single();
+        
+        if (teacherData) {
+          finalInstructorIntro = teacherData.intro || '';
+          finalInstructorImage = teacherData.image || '';
+        }
+      }
+
       const { error: updateError } = await supabase
         .from('courses')
         .update({
@@ -378,8 +424,8 @@ export default function AdminEditCoursePage() {
           level: form.level,
           category: form.category,
           instructor: form.instructor,
-          instructorIntro: form.instructorIntro,
-          instructorImage: form.instructorImage,
+          instructorIntro: finalInstructorIntro,
+          instructorImage: finalInstructorImage,
           thumbnail: form.thumbnail,
           price: form.price,
           discount: form.discount,
@@ -548,90 +594,37 @@ export default function AdminEditCoursePage() {
                   <p className="mt-2 text-sm text-green-700">Adding new category</p>
                 )}
               </label>
-              <label className="block" ref={instructorWrapperRef}>
+              <label className="block">
                 <span className="text-sm font-bold text-gray-700">Instructor Name</span>
                 <div className="relative mt-3">
-                  <input
+                  <select
                     value={form.instructor}
-                    onChange={(e) => handleInstructorInput(e.target.value)}
-                    onFocus={() => setInstructorDropdownOpen(true)}
-                    placeholder="Search for an official teacher..."
-                    className="w-full rounded-[2rem] border border-green-200 bg-white px-5 py-4 outline-none text-gray-900 shadow-sm transition focus:border-green-500 focus:ring-2 focus:ring-green-100"
-                  />
-                  {instructorDropdownOpen && filteredInstructors.length > 0 && (
-                    <div className="absolute left-0 right-0 z-20 mt-2 rounded-[2rem] border border-green-200 bg-white shadow-2xl">
-                      <ul className="overflow-hidden rounded-[2rem]">
-                        {filteredInstructors.map((instructor) => (
-                          <li key={instructor}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                updateField('instructor', instructor);
-                                setInstructorDropdownOpen(false);
-                              }}
-                              className="w-full text-left px-5 py-4 text-gray-900 transition hover:bg-green-50 hover:text-green-700"
-                            >
-                              {instructor}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                    onChange={(e) => updateField('instructor', e.target.value)}
+                    className="w-full rounded-[2rem] border border-green-200 bg-white px-5 py-4 pr-12 outline-none text-gray-900 shadow-sm transition focus:border-green-500 focus:ring-2 focus:ring-green-100 appearance-none"
+                  >
+                    <option value="" disabled>Select an instructor</option>
+                    {instructors.map((instructor) => (
+                      <option key={instructor} value={instructor}>{instructor}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-green-700 pointer-events-none" />
                 </div>
-                {!isKnownInstructor && form.instructor.trim() !== '' && (
-                  <p className="mt-2 text-sm text-red-600 font-bold">Must select a registered teacher from the dropdown.</p>
-                )}
-              </label>
-              <label className="block">
-                <span className="text-sm font-bold text-gray-700">Instructor Image</span>
-                <input 
-                  type="file" 
-                  accept="image/*" 
-                  onChange={handleInstructorImageUpload} 
-                  className="hidden" 
-                  id="instructor-image-upload"
-                />
-                <label 
-                  htmlFor="instructor-image-upload"
-                  className={`mt-3 flex items-center justify-center w-full rounded-3xl border-2 border-dashed p-4 cursor-pointer transition-colors overflow-hidden ${form.instructorImage ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:border-gray-400 bg-white'}`}
-                >
-                  {form.instructorImage ? (
-                    <div className="flex flex-col items-center">
-                      <CheckCircle2 size={24} className="text-green-600 mb-2"/>
-                      <span className="text-green-600 font-bold text-sm">Image Selected</span>
-                      <img src={form.instructorImage} alt="Preview" className="mt-4 h-24 object-cover rounded-lg border border-green-200" />
-                    </div>
-                  ) : (
-                    <span className="text-gray-500 text-sm font-medium flex flex-col items-center gap-2"><Upload size={20} className="text-gray-400"/> Click to browse & upload</span>
-                  )}
-                </label>
-              </label>
-              <label className="block lg:col-span-2">
-                <span className="text-sm font-bold text-gray-700">Instructor Intro</span>
-                <textarea
-                  value={form.instructorIntro}
-                  onChange={(e) => updateField('instructorIntro', e.target.value)}
-                  placeholder="Write a brief intro for the instructor"
-                  rows={3}
-                  className="mt-3 w-full rounded-3xl border border-gray-200 bg-white px-5 py-4 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 resize-none"
-                />
               </label>
               <label className="block">
                 <span className="text-sm font-bold text-gray-700">Price</span>
                 <input
                   value={form.price}
-                  onChange={(e) => updateField('price', e.target.value)}
-                  placeholder="Enter price"
+                  onChange={(e) => handleCurrencyInput('price', e.target.value)}
+                  placeholder="e.g. Rs. 5,000"
                   className="mt-3 w-full rounded-3xl border border-gray-200 bg-white px-5 py-4 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
                 />
               </label>
               <label className="block">
-                <span className="text-sm font-bold text-gray-700">Discount (optional)</span>
+                <span className="text-sm font-bold text-gray-700">Discount Percentage (optional)</span>
                 <input
                   value={form.discount}
-                  onChange={(e) => updateField('discount', e.target.value)}
-                  placeholder="Enter discount percentage"
+                  onChange={(e) => updateField('discount', e.target.value.replace(/\D/g, ''))}
+                  placeholder="e.g. 10"
                   className="mt-3 w-full rounded-3xl border border-gray-200 bg-white px-5 py-4 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
                 />
               </label>
@@ -663,8 +656,8 @@ export default function AdminEditCoursePage() {
 
               <div className="space-y-6">
                 {form.lectures.map((lecture, index) => (
-                  <div key={index} className="grid gap-4 md:grid-cols-12 items-end rounded-3xl border border-gray-200 bg-white p-6 relative">
-                    <div className="md:col-span-4">
+                  <div key={index} className="grid gap-4 md:grid-cols-12 items-end rounded-3xl border border-gray-200 bg-white p-6">
+                    <div className="md:col-span-4 mt-4 md:mt-0">
                       <label className="block text-sm font-bold text-gray-700">Lecture Name</label>
                       <input
                         value={lecture.title}
@@ -684,7 +677,18 @@ export default function AdminEditCoursePage() {
                         className="mt-3 w-full rounded-3xl border border-gray-200 bg-gray-50 px-4 py-3 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
                       />
                     </div>
-                    <div className="md:col-span-2 text-right">
+                    <div className="md:col-span-2 flex flex-col items-end">
+                      <div className="flex items-center gap-1 mb-3">
+                        <button type="button" onClick={() => moveLectureUp(index)} disabled={index === 0} className={`p-1 rounded-full ${index === 0 ? 'text-gray-300' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'} transition-colors`}>
+                          <ArrowUp size={16} />
+                        </button>
+                        <button type="button" onClick={() => moveLectureDown(index)} disabled={index === form.lectures.length - 1} className={`p-1 rounded-full ${index === form.lectures.length - 1 ? 'text-gray-300' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'} transition-colors`}>
+                          <ArrowDown size={16} />
+                        </button>
+                        <button type="button" onClick={() => removeLecture(index)} className="p-1 rounded-full text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors">
+                          <X size={16} />
+                        </button>
+                      </div>
                       <div className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">
                         {lecture.type === 'demo' ? 'Demo' : lecture.type === 'quiz' ? 'Quiz' : 'Paid'}
                       </div>
@@ -697,17 +701,6 @@ export default function AdminEditCoursePage() {
                         )}
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newLectures = form.lectures.filter((_, i) => i !== index);
-                        setForm((prev) => ({ ...prev, lectures: newLectures }));
-                      }}
-                      className="absolute -top-3 -right-3 bg-red-100 text-red-600 rounded-full p-2 hover:bg-red-200 transition-colors shadow-sm"
-                      title="Remove Lecture"
-                    >
-                      <X size={14} />
-                    </button>
                   </div>
                 ))}
               </div>

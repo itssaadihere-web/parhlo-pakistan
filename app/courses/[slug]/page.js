@@ -23,16 +23,12 @@ import {
 
 import { supabase } from '@/utils/supabase';
 import { getDeterministicRating } from '@/utils/courseHelpers';
+import { formatCurrency } from '@/utils/currencyHelpers';
 
 const parsePriceValue = (value) => {
   if (value === undefined || value === null) return 0;
   const numeric = String(value).replace(/[^0-9.]/g, '');
   return parseFloat(numeric) || 0;
-};
-
-const formatCurrency = (value) => {
-  if (value === undefined || value === null || Number.isNaN(value)) return '0';
-  return Number(value).toLocaleString('en-US', { maximumFractionDigits: 0 });
 };
 
 export default function DynamicCourseDetail() {
@@ -50,6 +46,9 @@ export default function DynamicCourseDetail() {
   // Payment Form State
   const [transactionId, setTransactionId] = useState('');
   const [receiptImage, setReceiptImage] = useState(null);
+  const [profileName, setProfileName] = useState('');
+  const [profilePhone, setProfilePhone] = useState('');
+  const [paymentMode, setPaymentMode] = useState('full');
   const fileInputRef = React.useRef(null);
 
   const handleFileUpload = (e) => {
@@ -65,11 +64,14 @@ export default function DynamicCourseDetail() {
   
   // Access Control State
   const [userEmail, setUserEmail] = useState('');
-  const [paymentStatus, setPaymentStatus] = useState(null); // null | 'pending' | 'approved'
+  const [paymentStatus, setPaymentStatus] = useState(null); // null | 'pending' | 'approved' | 'suspended'
+  const [purchaseRecord, setPurchaseRecord] = useState(null);
+  const [isInstallmentDue, setIsInstallmentDue] = useState(false);
   
   // Video Player State
   const [previewLecture, setPreviewLecture] = useState(null);
   const [showPreviewOverlay, setShowPreviewOverlay] = useState(false);
+  const [showAllLectures, setShowAllLectures] = useState(false);
 
   const previewItem = previewLecture !== null ? courseData?.curriculum?.[previewLecture] : null;
   const previewUrl = previewItem?.videoId
@@ -91,15 +93,35 @@ export default function DynamicCourseDetail() {
         // Fetch purchase status from Supabase
         const { data: purchase, error } = await supabase
           .from('purchases')
-          .select('status')
+          .select('*')
           .eq('student_email', email)
           .eq('course_slug', slug)
           .single();
 
         if (!error && purchase) {
-          setPaymentStatus(purchase.status);
+          setPurchaseRecord(purchase);
+          
+          let isDue = false;
+          if (purchase.payment_plan === 'installment' && purchase.status === 'approved' && purchase.next_due_date) {
+            const dueDate = new Date(purchase.next_due_date);
+            if (dueDate < new Date()) {
+              isDue = true;
+            }
+          }
+
+          setIsInstallmentDue(isDue);
+          setPaymentStatus(isDue ? 'suspended' : purchase.status);
         } else {
           setPaymentStatus(null);
+          setPurchaseRecord(null);
+          setIsInstallmentDue(false);
+        }
+
+        // Fetch user profile to pre-fill payment modal
+        const { data: userProfile } = await supabase.from('users').select('full_name, phone').eq('email', email).single();
+        if (userProfile) {
+          setProfileName(userProfile.full_name && userProfile.full_name !== email.split('@')[0] ? userProfile.full_name : '');
+          setProfilePhone(userProfile.phone || '');
         }
       }
     }
@@ -141,6 +163,8 @@ export default function DynamicCourseDetail() {
           price: adminCourse.price || '0',
           originalPrice: formatCurrency(originalPrice),
           salePrice: formatCurrency(salePriceValue),
+          rawOriginalPrice: originalPrice,
+          rawSalePrice: salePriceValue,
           discount: discountPercent > 0 ? discountPercent : 0,
           savings: savings > 0 ? formatCurrency(savings) : null,
           students: studentsCount >= 5 ? String(studentsCount) : null,
@@ -216,7 +240,11 @@ export default function DynamicCourseDetail() {
   };
 
   const submitPayment = async () => {
-    if (!transactionId) {
+    if (!profileName.trim() || !profilePhone.trim()) {
+      alert("Please provide your Full Name and WhatsApp Number.");
+      return;
+    }
+    if (!transactionId.trim()) {
       alert("Please enter a Transaction ID");
       return;
     }
@@ -228,24 +256,50 @@ export default function DynamicCourseDetail() {
     setLoading(true);
 
     try {
-      // Insert into Supabase 'purchases' table
-      const { error } = await supabase
-        .from('purchases')
-        .insert([
-          {
-            student_email: userEmail,
-            course_slug: courseData.slug,
-            status: 'pending',
-            payment_screenshot_url: receiptImage, // Note: In production, upload to Supabase Storage instead of Base64
-            // metadata: { courseName: courseData.title, transactionId: transactionId } // Optional extra info
-          }
-        ]);
+      // Update user's profile with provided name and phone
+      await supabase.from('users').update({ full_name: profileName, phone: profilePhone }).eq('email', userEmail);
 
-      if (error) throw error;
+      if (isInstallmentDue && purchaseRecord) {
+        // Upload next installment
+        const currentHistory = Array.isArray(purchaseRecord.payment_history) ? purchaseRecord.payment_history : [];
+        currentHistory.push({
+          receiptUrl: purchaseRecord.payment_screenshot_url,
+          date: new Date().toISOString()
+        });
+
+        const { error } = await supabase
+          .from('purchases')
+          .update({
+            status: 'pending',
+            payment_screenshot_url: receiptImage,
+            payment_history: currentHistory
+          })
+          .eq('id', purchaseRecord.id);
+
+        if (error) throw error;
+        alert("Next installment payment submitted! Admin will review it shortly.");
+      } else {
+        // New purchase
+        const { error } = await supabase
+          .from('purchases')
+          .insert([
+            {
+              student_email: userEmail,
+              course_slug: courseData.slug,
+              status: 'pending',
+              payment_screenshot_url: receiptImage, // Note: In production, upload to Supabase Storage instead of Base64
+              payment_plan: paymentMode,
+              installments_paid: paymentMode === 'installment' ? 0 : 1
+            }
+          ]);
+  
+        if (error) throw error;
+        alert("Payment submitted! An admin will review and approve your access shortly.");
+      }
 
       setPaymentStatus('pending');
+      setIsInstallmentDue(false);
       setShowPaymentModal(false);
-      alert("Payment submitted! An admin will review and approve your access shortly.");
     } catch (err) {
       console.error('Error submitting payment:', err);
       const errMsg = typeof err === 'object' ? (err.message || err.details || JSON.stringify(err)) : String(err);
@@ -350,14 +404,44 @@ export default function DynamicCourseDetail() {
       />
 
       {showPaymentModal && (
-        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white p-10 rounded-[2.5rem] max-w-md w-full relative shadow-2xl border border-gray-100">
-            <button onClick={() => setShowPaymentModal(false)} className="absolute top-8 right-8 text-gray-400 hover:text-gray-900 transition-colors"><X /></button>
-            <div className="w-14 h-14 bg-green-50 rounded-2xl flex items-center justify-center text-green-600 mb-6"><CreditCard size={28} /></div>
-            <h3 className="text-2xl font-black mb-1 text-slate-900">Buy {courseData.title}</h3>
-            <p className="text-gray-500 mb-8 text-sm font-medium">Send <span className="font-bold text-gray-900 text-lg">Rs. {courseData.salePrice}</span> to the details below.</p>
+        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white p-8 md:p-10 rounded-[2.5rem] max-w-4xl w-full relative shadow-2xl border border-gray-100 flex flex-col md:flex-row gap-10 my-8">
+            <button onClick={() => setShowPaymentModal(false)} className="absolute top-6 right-6 md:top-8 md:right-8 text-gray-400 hover:text-gray-900 transition-colors z-10"><X /></button>
             
-            <div className="space-y-4 mb-8">
+            {/* Left Column - Payment Details */}
+            <div className="flex-1 border-b md:border-b-0 md:border-r border-gray-100 pb-8 md:pb-0 md:pr-10">
+              <div className="w-14 h-14 bg-green-50 rounded-2xl flex items-center justify-center text-green-600 mb-6"><CreditCard size={28} /></div>
+              
+              {isInstallmentDue ? (
+                <>
+                  <h3 className="text-2xl font-black mb-1 text-slate-900">Pay Next Installment</h3>
+                  <p className="text-gray-500 mb-8 text-sm font-medium">Send <span className="font-bold text-gray-900 text-lg">Rs. {Math.round(courseData.rawOriginalPrice / 3).toLocaleString()}</span> to the details below to resume your course.</p>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-2xl font-black mb-1 text-slate-900">Buy {courseData.title}</h3>
+                  
+                  <div className="mb-6 grid grid-cols-2 gap-4 mt-6">
+                    <div 
+                      onClick={() => setPaymentMode('full')} 
+                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${paymentMode === 'full' ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-green-200'}`}
+                    >
+                      <p className="text-sm font-bold text-gray-900 mb-1">Pay in Full</p>
+                      <p className="text-xs text-green-600 font-bold">{courseData.salePrice}</p>
+                    </div>
+                    <div 
+                      onClick={() => setPaymentMode('installment')} 
+                      className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${paymentMode === 'installment' ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-green-200'}`}
+                    >
+                      <p className="text-sm font-bold text-gray-900 mb-1">3 Installments</p>
+                      <p className="text-xs text-green-600 font-bold">Rs. {Math.round(courseData.rawOriginalPrice / 3).toLocaleString()} /mo</p>
+                    </div>
+                  </div>
+
+                  <p className="text-gray-500 mb-8 text-sm font-medium">Send <span className="font-bold text-gray-900 text-lg">{paymentMode === 'full' ? courseData.salePrice : `Rs. ${Math.round(courseData.rawOriginalPrice / 3).toLocaleString()}`}</span> to the details below.</p>
+                </>
+              )}
+
               <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
                 <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest mb-1">Bank Transfer (Bank Alfalah)</p>
                 <p className="text-lg font-mono text-gray-900 font-bold tracking-tight">55295001809451</p>
@@ -365,37 +449,66 @@ export default function DynamicCourseDetail() {
               </div>
             </div>
 
-            <div className="mb-4">
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-2">Transaction ID</label>
-              <input type="text" placeholder="e.g. TID123456789" className="w-full bg-white border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-green-500 font-medium" value={transactionId} onChange={(e) => setTransactionId(e.target.value)} />
-            </div>
-
-            <div className="mb-8">
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-2">Upload Receipt Proof</label>
-              <input 
-                type="file" 
-                accept="image/*" 
-                ref={fileInputRef} 
-                onChange={handleFileUpload} 
-                className="hidden" 
-              />
-              <div 
-                className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-colors overflow-hidden ${receiptImage ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:border-gray-400'}`}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {receiptImage ? (
-                  <div className="flex flex-col items-center">
-                    <CheckCircle2 size={24} className="text-green-600 mb-2"/>
-                    <span className="text-green-600 font-bold text-sm">Receipt Uploaded Successfully</span>
-                    <img src={receiptImage} alt="Receipt preview" className="mt-4 h-24 object-contain rounded-lg border border-green-200" />
-                  </div>
-                ) : (
-                  <span className="text-gray-500 text-sm font-medium flex flex-col items-center gap-2"><Upload size={20} className="text-gray-400"/> Click to browse & upload receipt</span>
-                )}
+            {/* Right Column - User Inputs */}
+            <div className="flex-1 flex flex-col pt-2 md:pt-0">
+              <div className="mb-4">
+                <label className="block text-sm font-bold text-gray-700 mb-2">Full Name</label>
+                <input
+                  type="text"
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  placeholder="Enter your full name"
+                  className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-green-500 font-medium"
+                />
               </div>
-            </div>
+              <div className="mb-4">
+                <label className="block text-sm font-bold text-gray-700 mb-2">WhatsApp Number</label>
+                <input
+                  type="text"
+                  value={profilePhone}
+                  onChange={(e) => setProfilePhone(e.target.value)}
+                  placeholder="Enter your WhatsApp number"
+                  className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-green-500 font-medium"
+                />
+              </div>
+              <div className="mb-6">
+                <label className="block text-sm font-bold text-gray-700 mb-2">Transaction ID / TID</label>
+                <input 
+                  type="text" 
+                  value={transactionId}
+                  onChange={(e) => setTransactionId(e.target.value)}
+                  placeholder="e.g. 1234567890"
+                  className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-green-500 font-medium" 
+                />
+              </div>
 
-            <button onClick={submitPayment} className="w-full bg-gray-900 text-white py-4 rounded-xl font-black hover:bg-green-600 transition-all shadow-xl">SUBMIT PAYMENT</button>
+              <div className="mb-8 flex-1">
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-2">Upload Receipt Proof</label>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  ref={fileInputRef} 
+                  onChange={handleFileUpload} 
+                  className="hidden" 
+                />
+                <div 
+                  className={`border-2 border-dashed rounded-xl p-4 flex flex-col justify-center text-center cursor-pointer transition-colors overflow-hidden min-h-[100px] ${receiptImage ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:border-gray-400'}`}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {receiptImage ? (
+                    <div className="flex flex-col items-center">
+                      <CheckCircle2 size={24} className="text-green-600 mb-2"/>
+                      <span className="text-green-600 font-bold text-sm">Receipt Uploaded Successfully</span>
+                      <img src={receiptImage} alt="Receipt preview" className="mt-3 h-16 object-contain rounded-lg border border-green-200" />
+                    </div>
+                  ) : (
+                    <span className="text-gray-500 text-sm font-medium flex flex-col items-center gap-2"><Upload size={20} className="text-gray-400"/> Click to browse & upload receipt</span>
+                  )}
+                </div>
+              </div>
+
+              <button onClick={submitPayment} className="w-full bg-gray-900 text-white py-4 rounded-xl font-black hover:bg-green-600 transition-all shadow-xl mt-auto">SUBMIT PAYMENT</button>
+            </div>
           </div>
         </div>
       )}
@@ -442,6 +555,16 @@ export default function DynamicCourseDetail() {
               )}
             </div>
 
+            {isInstallmentDue && (
+              <div className="bg-orange-500 text-white p-4 rounded-xl mb-6 flex items-start gap-3">
+                <AlertCircle size={24} className="shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-bold">Installment Due</h4>
+                  <p className="text-sm text-white/90">Please pay your next installment to view and attempt the rest of the lectures/quizzes.</p>
+                </div>
+              </div>
+            )}
+
             <p className="text-emerald-100/80 text-lg md:text-xl font-medium max-w-xl leading-relaxed mb-10">
               {courseData.description}
             </p>
@@ -475,19 +598,28 @@ export default function DynamicCourseDetail() {
             <div className="bg-white rounded-[2.5rem] p-8 shadow-2xl border border-gray-100 text-slate-900 w-full lg:w-[380px] hover:translate-y-[-4px] transition-transform duration-500">
               <div className="flex flex-col gap-3 mb-4">
                 <div className="flex flex-wrap items-end gap-4">
-                  <div>
-                    <p className="text-4xl font-black tracking-tighter text-gray-900 font-mono">PKR {courseData.salePrice}</p>
+                  <div className="flex flex-col">
+                    <p className="text-4xl font-black tracking-tighter text-gray-900 font-mono">{courseData.salePrice}</p>
                     {courseData.discount > 0 && (
-                      <p className="text-sm text-gray-500 line-through">PKR {courseData.originalPrice}</p>
+                      <p className="text-sm text-gray-500 line-through mt-1">{courseData.originalPrice}</p>
                     )}
                   </div>
                   {courseData.discount > 0 && (
-                    <div className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black uppercase tracking-[0.2em] text-emerald-800">
-                      Save {courseData.discount}%{courseData.savings ? ` · PKR ${courseData.savings}` : ''}
-                    </div>
+                    <span className="bg-green-100 text-green-700 font-black text-[10px] px-3 py-1 rounded-md mt-2 md:mt-0 uppercase tracking-widest">
+                      Save {courseData.discount}%{courseData.savings ? ` · ${courseData.savings}` : ''}
+                    </span>
                   )}
                 </div>
                 <p className="text-gray-400 text-sm font-medium">One-time payment for lifetime access</p>
+              </div>
+
+              {/* Added Installment Note */}
+              <div className="bg-amber-50 border border-amber-200 p-6 rounded-2xl mb-8 flex items-start gap-4">
+                <div className="text-amber-500 mt-1"><CreditCard size={24} /></div>
+                <div>
+                  <h4 className="text-amber-900 font-bold mb-1">New: Pay in 3 Monthly Installments</h4>
+                  <p className="text-amber-700/80 text-sm font-medium">You can now split the cost of this course into 3 equal monthly payments. Note that the original price will apply when paying in installments.</p>
+                </div>
               </div>
 
               {!userEmail ? (
@@ -501,6 +633,10 @@ export default function DynamicCourseDetail() {
               ) : paymentStatus === 'pending' ? (
                 <button disabled className="w-full bg-amber-100 text-amber-800 py-5 rounded-2xl font-black text-lg mb-6 flex justify-center items-center gap-2">
                   <Clock size={24} /> Payment Pending Approval
+                </button>
+              ) : isInstallmentDue ? (
+                <button onClick={handleEnrollClick} className="w-full bg-orange-500 text-white py-5 rounded-2xl font-black text-lg hover:bg-orange-600 transition-all shadow-xl shadow-orange-900/10 mb-6">
+                  Pay Next Installment
                 </button>
               ) : (
                 <button onClick={handleEnrollClick} className="w-full bg-[#064e3b] text-white py-5 rounded-2xl font-black text-lg hover:bg-green-600 transition-all shadow-xl shadow-green-900/10 mb-6">
@@ -543,7 +679,7 @@ export default function DynamicCourseDetail() {
           )}
 
           <div className="space-y-4">
-            {courseData.curriculum.map((item, idx) => {
+            {(showAllLectures ? courseData.curriculum : courseData.curriculum.slice(0, 10)).map((item, idx) => {
               const hasAccess = item.isFree || paymentStatus === 'approved';
               
               return (
@@ -590,6 +726,17 @@ export default function DynamicCourseDetail() {
               );
             })}
           </div>
+
+          {!showAllLectures && courseData.curriculum.length > 10 && (
+            <div className="mt-12 text-center">
+              <button 
+                onClick={() => setShowAllLectures(true)}
+                className="bg-green-50 text-green-700 hover:bg-green-100 font-bold py-4 px-10 rounded-full transition-colors border border-green-200"
+              >
+                See all {courseData.curriculum.length} lectures
+              </button>
+            </div>
+          )}
 
           <div className="mt-20 p-10 bg-gray-50 rounded-[3rem] flex flex-col md:flex-row gap-10 items-center border border-gray-100">
             <div className="w-32 h-32 bg-gray-200 rounded-full shrink-0 overflow-hidden border-4 border-white shadow-lg">

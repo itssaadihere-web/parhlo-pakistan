@@ -28,6 +28,8 @@ export default function StudentDashboard() {
   const [studentName, setStudentName] = useState('Student');
   const [userEmail, setUserEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [intro, setIntro] = useState('');
+  const [image, setImage] = useState('');
   
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -82,6 +84,8 @@ export default function StudentDashboard() {
       if (userProfile) {
         setStudentName(userProfile.full_name || email.split('@')[0]);
         setPhoneNumber(userProfile.phone || '');
+        setIntro(userProfile.intro || '');
+        setImage(userProfile.image || '');
       } else if (!profileError || profileError.code === 'PGRST116') {
         // User doesn't exist in users table (maybe Google login), let's create a stub
         await supabase.from('users').insert([{ email, full_name: email.split('@')[0], role: 'student' }]);
@@ -463,15 +467,35 @@ export default function StudentDashboard() {
                   className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-green-500 font-medium" 
                 />
               </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Intro/Bio</label>
+                <textarea 
+                  value={intro} 
+                  onChange={(e) => setIntro(e.target.value)} 
+                  placeholder="Tell us a little about yourself"
+                  className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-green-500 font-medium resize-none"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Profile Image URL</label>
+                <input 
+                  type="text" 
+                  value={image} 
+                  onChange={(e) => setImage(e.target.value)} 
+                  placeholder="https://example.com/my-pic.jpg"
+                  className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-green-500 font-medium" 
+                />
+              </div>
               <button 
                 onClick={async () => {
                   const { error } = await supabase
                     .from('users')
-                    .update({ full_name: studentName, phone: phoneNumber })
+                    .update({ full_name: studentName, phone: phoneNumber, intro: intro, image: image })
                     .eq('email', userEmail);
                     
                   if (error) {
-                    alert("Error updating profile. Ensure 'users' table exists.");
+                    alert("Error updating profile.");
                   } else {
                     alert("Profile settings saved successfully!");
                   }

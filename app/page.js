@@ -18,6 +18,7 @@ import {
 
 import { supabase } from '@/utils/supabase';
 import { getDeterministicRating } from '@/utils/courseHelpers';
+import { formatCurrency } from '@/utils/currencyHelpers';
 
 export default function ParhloPakistan() {
   const router = useRouter();
@@ -109,7 +110,7 @@ export default function ParhloPakistan() {
             <button onClick={() => setShowPaymentModal(null)} className="absolute top-8 right-8 text-gray-400 hover:text-gray-900 transition-colors"><X /></button>
             <div className="w-14 h-14 bg-green-50 rounded-2xl flex items-center justify-center text-green-600 mb-6"><CreditCard size={28} /></div>
             <h3 className="text-2xl font-black mb-1 text-slate-900">Get {showPaymentModal.title}</h3>
-            <p className="text-gray-500 mb-8 text-sm font-medium">Send <span className="font-bold text-gray-900 text-lg">Rs. {showPaymentModal.price}</span> to the details below.</p>
+            <p className="text-gray-500 mb-8 text-sm font-medium">Send <span className="font-bold text-gray-900 text-lg">{formatCurrency(showPaymentModal.price)}</span> to the details below.</p>
             <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 mb-8">
               <p className="text-[10px] text-green-600 font-black uppercase tracking-widest mb-1">EasyPaisa / JazzCash</p>
               <p className="text-xl font-mono text-gray-900 font-bold tracking-tight">03xx-xxxxxxx</p>
@@ -282,14 +283,14 @@ export default function ParhloPakistan() {
                   <div className="flex flex-col">
                     {course.discount > 0 ? (
                       <>
-                        <span className="text-sm font-bold text-gray-400 line-through">Rs. {course.price.toLocaleString()}</span>
+                        <span className="text-sm font-bold text-gray-400 line-through">{formatCurrency(course.price)}</span>
                         <div className="flex items-center gap-2">
-                          <span className="text-2xl font-black text-gray-900">Rs. {course.salePrice.toLocaleString()}</span>
+                          <span className="text-2xl font-black text-gray-900">{formatCurrency(course.salePrice)}</span>
                           <span className="bg-red-100 text-red-600 text-[10px] font-black px-2 py-0.5 rounded-md">-{course.discount}%</span>
                         </div>
                       </>
                     ) : (
-                      <span className="text-2xl font-black text-gray-900">Rs. {course.price.toLocaleString()}</span>
+                      <span className="text-2xl font-black text-gray-900">{formatCurrency(course.price)}</span>
                     )}
                   </div>
                   <Link href={`/courses/${course.slug}`}>

@@ -14,7 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { getDeterministicRating } from '@/utils/courseHelpers';
-
+import { formatCurrency } from '@/utils/currencyHelpers';
 import { supabase } from '@/utils/supabase';
 
 export default function AllCourses() {
@@ -242,14 +242,14 @@ export default function AllCourses() {
                     <div className="flex flex-col">
                       {course.discount > 0 ? (
                         <>
-                          <span className="text-sm font-bold text-gray-400 line-through">Rs. {course.price.toLocaleString()}</span>
+                          <span className="text-sm font-bold text-gray-400 line-through">{formatCurrency(course.price)}</span>
                           <div className="flex items-center gap-2">
-                            <span className="text-2xl font-black text-gray-900">Rs. {course.salePrice.toLocaleString()}</span>
+                            <span className="text-2xl font-black text-gray-900">{formatCurrency(course.salePrice)}</span>
                             <span className="bg-red-100 text-red-600 text-[10px] font-black px-2 py-0.5 rounded-md">-{course.discount}%</span>
                           </div>
                         </>
                       ) : (
-                        <span className="text-2xl font-black text-gray-900">Rs. {course.price.toLocaleString()}</span>
+                        <span className="text-2xl font-black text-gray-900">{formatCurrency(course.price)}</span>
                       )}
                     </div>
                     <Link href={`/courses/${course.slug}`}>

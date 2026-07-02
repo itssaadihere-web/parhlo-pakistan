@@ -23,6 +23,7 @@ import {
 
 import { supabase } from '@/utils/supabase';
 import InactivityTracker from '@/app/components/InactivityTracker';
+import { formatCurrency } from '@/utils/currencyHelpers';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -36,6 +37,8 @@ export default function AdminDashboard() {
   const [viewingStudent, setViewingStudent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [teachers, setTeachers] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [editingProfile, setEditingProfile] = useState(null);
   const [newTeacher, setNewTeacher] = useState({ name: '', email: '', password: '' });
   const [teacherMessage, setTeacherMessage] = useState('');
 
@@ -107,7 +110,10 @@ export default function AdminDashboard() {
           status: p.status,
           receiptImage: p.payment_screenshot_url,
           date: new Date(p.created_at).toLocaleDateString(),
-          transactionId: 'N/A' // Not explicitly in schema, but can be added
+          transactionId: 'N/A', // Not explicitly in schema, but can be added
+          paymentPlan: p.payment_plan || 'full',
+          installmentsPaid: p.installments_paid ?? 1,
+          nextDueDate: p.next_due_date || null
         };
       });
       setPayments(mappedPayments);
@@ -124,6 +130,19 @@ export default function AdminDashboard() {
       console.error('Error fetching teachers:', teachersError);
     } else {
       setTeachers(teachersData || []);
+    }
+
+    // Fetch students
+    const { data: studentsData, error: studentsError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('role', 'student')
+      .order('created_at', { ascending: false });
+    
+    if (studentsError) {
+      console.error('Error fetching students:', studentsError);
+    } else {
+      setStudents(studentsData || []);
     }
 
     setLoading(false);
@@ -169,9 +188,30 @@ export default function AdminDashboard() {
   };
 
   const handleApprovePayment = async (paymentId) => {
+    const payment = payments.find(p => p.id === paymentId);
+    if (!payment) return;
+
+    let updatePayload = { status: 'approved' };
+    let newInstallmentsPaid = payment.installmentsPaid;
+    let newNextDueDate = payment.nextDueDate;
+
+    if (payment.paymentPlan === 'installment') {
+      newInstallmentsPaid += 1;
+      if (newInstallmentsPaid < 3) {
+        // Set next due date to 30 days from now
+        const nextDate = new Date();
+        nextDate.setDate(nextDate.getDate() + 30);
+        newNextDueDate = nextDate.toISOString();
+      } else {
+        newNextDueDate = null; // Fully paid
+      }
+      updatePayload.installments_paid = newInstallmentsPaid;
+      updatePayload.next_due_date = newNextDueDate;
+    }
+
     const { error } = await supabase
       .from('purchases')
-      .update({ status: 'approved' })
+      .update(updatePayload)
       .eq('id', paymentId);
 
     if (error) {
@@ -180,8 +220,7 @@ export default function AdminDashboard() {
       return;
     } 
 
-    const payment = payments.find(p => p.id === paymentId);
-    if (payment && payment.courseSlug) {
+    if (payment.courseSlug) {
       // Fetch current course student count
       const { data: courseData } = await supabase
         .from('courses')
@@ -198,10 +237,45 @@ export default function AdminDashboard() {
       }
     }
 
-    const updatedPayments = payments.map(p =>
-      p.id === paymentId ? { ...p, status: 'approved' } : p
-    );
+    const updatedPayments = payments.map(p => {
+      if (p.id === paymentId) {
+        return {
+          ...p,
+          status: 'approved',
+          installmentsPaid: newInstallmentsPaid,
+          nextDueDate: newNextDueDate
+        };
+      }
+      return p;
+    });
     setPayments(updatedPayments);
+  };
+
+  const handleToggleAccess = async (paymentId, currentStatus) => {
+    const newStatus = currentStatus === 'approved' ? 'suspended' : 'approved';
+    const action = newStatus === 'suspended' ? 'suspend' : 'resume';
+    if (!window.confirm(`Are you sure you want to ${action} this student's access to this course?`)) return;
+
+    const { error } = await supabase
+      .from('purchases')
+      .update({ status: newStatus })
+      .eq('id', paymentId);
+
+    if (error) {
+      alert(`Failed to ${action} access`);
+      return;
+    }
+
+    const updatedPayments = payments.map(p => p.id === paymentId ? { ...p, status: newStatus } : p);
+    setPayments(updatedPayments);
+
+    setViewingStudent(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        activeCourses: prev.activeCourses.map(c => c.id === paymentId ? { ...c, status: newStatus } : c)
+      };
+    });
   };
 
   const handleRevokeAccess = async (paymentId) => {
@@ -240,13 +314,13 @@ export default function AdminDashboard() {
   const approvedPayments = payments.filter(p => p.status === 'approved');
 
   const getEnrollments = () => {
-    let studentEmails = [...new Set(payments.filter(p => p.status === 'approved').map(p => p.userEmail))];
+    let studentEmails = [...new Set(payments.filter(p => ['approved', 'suspended'].includes(p.status)).map(p => p.userEmail))];
     studentEmails = studentEmails.filter(email => email !== 'parhlo.pakistan.edu@gmail.com');
     return studentEmails.map(email => {
       const studentPayments = payments.filter(p => p.userEmail === email);
       return {
         email,
-        activeCourses: studentPayments.filter(p => p.status === 'approved'),
+        activeCourses: studentPayments.filter(p => ['approved', 'suspended'].includes(p.status)),
         pendingCourses: studentPayments.filter(p => p.status === 'pending')
       };
     });
@@ -255,8 +329,9 @@ export default function AdminDashboard() {
   const menuItems = [
     { name: 'Dashboard', icon: <Globe size={20} />, id: 'dashboard' },
     { name: 'Teachers', icon: <User size={20} />, id: 'teachers' },
+    { name: 'Students', icon: <Users size={20} />, id: 'students' },
     { name: 'Subjects', icon: <PlayCircle size={20} />, id: 'courses' },
-    { name: 'Enrollments', icon: <Users size={20} />, id: 'enrollments' },
+    { name: 'Enrollments', icon: <BookOpen size={20} />, id: 'enrollments' },
     { name: 'Payments', icon: <CreditCard size={20} />, id: 'payments' },
     { name: 'Settings', icon: <ShieldCheck size={20} />, id: 'settings' }
   ];
@@ -342,7 +417,7 @@ export default function AdminDashboard() {
 
             <div className="grid grid-cols-4 gap-6 mb-10">
               {[
-                { label: 'Total Revenue', val: `PKR ${approvedPayments.reduce((sum, p) => sum + (p.coursePrice || 0), 0).toLocaleString()}`, color: 'bg-green-50 text-green-600' },
+                { label: 'Total Revenue', val: formatCurrency(approvedPayments.reduce((sum, p) => sum + (p.coursePrice || 0), 0)), color: 'bg-green-50 text-green-600' },
                 { label: 'Total Students', val: approvedPayments.length, color: 'bg-blue-50 text-blue-600' },
                 { label: 'Active Subjects', val: String(adminCourses.length), color: 'bg-emerald-50 text-emerald-600' },
                 { label: 'Pending Approvals', val: String(pendingApprovals.length), color: 'bg-amber-50 text-amber-600' },
@@ -426,7 +501,7 @@ export default function AdminDashboard() {
                 <div key={course.slug} className="grid grid-cols-12 gap-4 px-6 py-5 border-t border-gray-100 items-center hover:bg-gray-50 transition-colors">
                   <div className="col-span-3 font-bold text-slate-900">{course.name}</div>
                   <div className="col-span-2 text-gray-500">{course.category}</div>
-                  <div className="col-span-2 text-gray-500">Rs. {course.price}</div>
+                  <div className="col-span-2 text-gray-500">{formatCurrency(course.price)}</div>
                   <div className="col-span-2 text-gray-500">{course.instructor}</div>
                   <div className="col-span-1 text-gray-500">
                     <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">{course.level}</span>
@@ -487,12 +562,32 @@ export default function AdminDashboard() {
                 <div key={payment.id} className="bg-white rounded-[2rem] border border-amber-200 p-6 flex flex-col md:flex-row justify-between items-center shadow-sm relative overflow-hidden">
                   <div className="absolute left-0 top-0 bottom-0 w-2 bg-amber-400"></div>
                   <div className="pl-4">
-                    <h3 className="text-xl font-black text-gray-900">{payment.courseName}</h3>
+                    <h3 className="text-xl font-black text-gray-900">
+                      {payment.courseName}
+                      {payment.paymentPlan === 'installment' && (
+                        <span className="ml-3 text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full uppercase tracking-widest font-bold">
+                          Installment {payment.installmentsPaid + 1} of 3
+                        </span>
+                      )}
+                    </h3>
                     <p className="text-gray-500 font-medium">Student: <span className="font-bold text-gray-900">{payment.userEmail}</span></p>
                     <p className="text-gray-500 text-sm mt-2">Transaction ID: <span className="font-mono bg-gray-100 px-2 py-1 rounded text-gray-900">{payment.transactionId}</span></p>
                     <p className="text-xs text-gray-400 mt-2">Submitted: {payment.date}</p>
                   </div>
                   <div className="flex items-center gap-4 mt-4 md:mt-0">
+                    <button
+                      onClick={() => {
+                        const student = students.find(s => s.email === payment.userEmail);
+                        if (student) {
+                          setEditingProfile(student);
+                        } else {
+                          alert('Student profile not found in database.');
+                        }
+                      }}
+                      className="text-sm font-bold underline text-blue-600 hover:text-blue-800"
+                    >
+                      View Profile
+                    </button>
                     <button
                       onClick={() => payment.receiptImage ? setViewingReceipt(payment.receiptImage) : alert('No receipt was attached to this older payment.')}
                       className={`text-sm font-bold underline ${payment.receiptImage ? 'text-blue-600 hover:text-blue-800' : 'text-gray-400 cursor-not-allowed'}`}
@@ -528,7 +623,22 @@ export default function AdminDashboard() {
                         <p className="font-bold text-gray-900">{payment.courseName}</p>
                         <p className="text-xs text-gray-500">{payment.userEmail} • TID: {payment.transactionId}</p>
                       </div>
-                      <span className="text-xs font-black text-green-600 uppercase tracking-widest bg-green-50 px-3 py-1 rounded-full">Approved</span>
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={() => {
+                            const student = students.find(s => s.email === payment.userEmail);
+                            if (student) {
+                              setEditingProfile(student);
+                            } else {
+                              alert('Student profile not found in database.');
+                            }
+                          }}
+                          className="text-xs font-bold text-gray-500 hover:text-gray-900 underline"
+                        >
+                          View Profile
+                        </button>
+                        <span className="text-xs font-black text-green-600 uppercase tracking-widest bg-green-50 px-3 py-1 rounded-full">Approved</span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -662,7 +772,73 @@ export default function AdminDashboard() {
                         <p className="font-bold text-gray-900">{teacher.full_name}</p>
                         <p className="text-xs text-gray-500">{teacher.email}</p>
                       </div>
-                      <span className="text-xs font-bold text-blue-600 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full">Teacher</span>
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs font-bold text-blue-600 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full">Teacher</span>
+                        <button
+                          onClick={() => setEditingProfile(teacher)}
+                          className="text-gray-600 hover:text-gray-900 font-bold text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-full transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (window.confirm(`Are you sure you want to delete ${teacher.full_name}?`)) {
+                              const { error } = await supabase.from('users').delete().eq('id', teacher.id);
+                              if (error) alert("Error deleting teacher: " + error.message);
+                              else {
+                                alert("Teacher deleted successfully.");
+                                fetchData();
+                              }
+                            }
+                          }}
+                          className="text-red-600 hover:text-red-800 font-bold text-sm bg-red-50 hover:bg-red-100 px-3 py-1 rounded-full transition-colors"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {adminTab === 'students' && (
+          <div className="max-w-4xl">
+            <h1 className="text-3xl font-black mb-6">All Students</h1>
+            <p className="text-gray-500 mb-10">View and manage all registered students, regardless of enrollment status.</p>
+
+            <div className="bg-white rounded-[2rem] border border-gray-100 p-8 shadow-sm">
+              <h2 className="text-xl font-bold text-gray-900 mb-6">Registered Students</h2>
+              {students.length === 0 ? (
+                <p className="text-gray-500 italic">No students found.</p>
+              ) : (
+                <div className="space-y-4">
+                  {students.map(student => (
+                    <div key={student.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden shrink-0">
+                          {student.image ? (
+                            <img src={student.image} alt="Profile" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-400"><User size={20} /></div>
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-900">{student.full_name}</p>
+                          <p className="text-xs text-gray-500">{student.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs font-bold text-blue-600 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full">Student</span>
+                        <button
+                          onClick={() => setEditingProfile(student)}
+                          className="text-gray-600 hover:text-gray-900 font-bold text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-full transition-colors"
+                        >
+                          Edit
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -770,6 +946,91 @@ export default function AdminDashboard() {
         )}
       </main>
 
+      {/* Edit Profile Modal */}
+      {editingProfile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm" onClick={() => setEditingProfile(null)}></div>
+          <div className="bg-white rounded-[2.5rem] w-full max-w-lg p-8 relative z-10 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <button onClick={() => setEditingProfile(null)} className="absolute top-6 right-6 text-gray-400 hover:text-gray-900">
+              <X size={24} />
+            </button>
+            <h3 className="text-2xl font-black mb-6">Edit Profile</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Full Name</label>
+                <input
+                  type="text"
+                  value={editingProfile.full_name || ''}
+                  onChange={(e) => setEditingProfile({...editingProfile, full_name: e.target.value})}
+                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none focus:border-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Email</label>
+                <input
+                  type="text"
+                  value={editingProfile.email || ''}
+                  disabled
+                  className="w-full bg-gray-100 border border-gray-200 p-3 rounded-xl outline-none cursor-not-allowed text-gray-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  value={editingProfile.phone || ''}
+                  onChange={(e) => setEditingProfile({...editingProfile, phone: e.target.value})}
+                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none focus:border-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Intro/Bio</label>
+                <textarea
+                  value={editingProfile.intro || ''}
+                  onChange={(e) => setEditingProfile({...editingProfile, intro: e.target.value})}
+                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none focus:border-green-500 resize-none"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Profile Image URL</label>
+                <input
+                  type="text"
+                  value={editingProfile.image || ''}
+                  onChange={(e) => setEditingProfile({...editingProfile, image: e.target.value})}
+                  className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none focus:border-green-500"
+                  placeholder="https://example.com/image.png"
+                />
+              </div>
+              <div className="pt-4">
+                <button
+                  onClick={async () => {
+                    const updateData = {
+                      full_name: editingProfile.full_name,
+                      phone: editingProfile.phone,
+                      intro: editingProfile.intro,
+                      image: editingProfile.image,
+                    };
+                    const { error } = await supabase.from('users').update(updateData).eq('id', editingProfile.id);
+                    if (error) {
+                      alert("Error updating profile: " + error.message);
+                    } else {
+                      alert("Profile updated successfully!");
+                      setEditingProfile(null);
+                      fetchData();
+                    }
+                  }}
+                  className="w-full bg-green-600 text-white font-bold py-4 rounded-full hover:bg-green-700 transition-colors shadow-lg"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Receipt Modal */}
       {viewingReceipt && (
         <div className="fixed inset-0 z-[150] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
@@ -818,15 +1079,30 @@ export default function AdminDashboard() {
                     {viewingStudent.activeCourses.map(course => (
                       <div key={course.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
                         <div>
-                          <p className="font-bold text-gray-900">{course.courseName}</p>
-                          <p className="text-xs text-gray-500">Approved on {course.date}</p>
+                          <p className="font-bold text-gray-900">
+                            {course.courseName}
+                            {course.status === 'suspended' && <span className="ml-2 text-[10px] font-black text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full uppercase tracking-widest">Suspended</span>}
+                            {course.paymentPlan === 'installment' && <span className="ml-2 text-[10px] font-black text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full uppercase tracking-widest">Installment {course.installmentsPaid}/3</span>}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Approved on {course.date}
+                            {course.nextDueDate && ` • Next Due: ${new Date(course.nextDueDate).toLocaleDateString()}`}
+                          </p>
                         </div>
-                        <button 
-                          onClick={() => handleRevokeAccess(course.id)}
-                          className="text-xs font-bold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-lg transition-colors"
-                        >
-                          Remove Access
-                        </button>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => handleToggleAccess(course.id, course.status)}
+                            className={`text-xs font-bold px-4 py-2 rounded-lg transition-colors ${course.status === 'approved' ? 'text-orange-600 hover:text-orange-800 bg-orange-50 hover:bg-orange-100' : 'text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100'}`}
+                          >
+                            {course.status === 'approved' ? 'Suspend Access' : 'Resume Access'}
+                          </button>
+                          <button 
+                            onClick={() => handleRevokeAccess(course.id)}
+                            className="text-xs font-bold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-lg transition-colors"
+                          >
+                            Remove Permanently
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
