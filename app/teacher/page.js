@@ -126,10 +126,11 @@ export default function TeacherDashboard() {
       console.error(e);
     }
     if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('parhloAdmin');
       window.localStorage.removeItem('parhloRole');
       window.localStorage.removeItem('currentUserEmail');
+      window.location.href = '/';
     }
-    router.push('/');
   };
 
   const compressImage = (file, callback) => {

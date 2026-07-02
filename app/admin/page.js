@@ -156,9 +156,10 @@ export default function AdminDashboard() {
     }
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem('parhloAdmin');
+      window.localStorage.removeItem('parhloRole');
       window.localStorage.removeItem('currentUserEmail');
+      window.location.href = '/';
     }
-    router.push('/');
   };
 
   const handleDeleteCourse = (course) => {
