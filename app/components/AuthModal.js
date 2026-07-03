@@ -64,9 +64,9 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
           return;
         }
       } else {
-        // Fetch the user record from public.users to get the role
-        const { data: publicUser } = await supabase.from('users').select('*').eq('email', email).single();
-        fetchedUser = publicUser;
+        // We can get the role directly from the authenticated user's metadata
+        // This is much faster and avoids any RLS database errors
+        fetchedUser = { role: data.user.user_metadata?.role || 'student' };
       }
     }
 
