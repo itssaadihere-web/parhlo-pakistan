@@ -25,45 +25,48 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
     let fetchedUser = null;
 
     if (authMode === 'signup') {
-      const { data: existing } = await supabase.from('users').select('*').eq('email', email).single();
-      if (existing) {
-        alert("Account already exists. Please log in.");
-        return;
-      }
-      
-      const role = email === "parhlo.pakistan.edu@gmail.com" ? "admin" : "student";
-      
-      const { error } = await supabase.from('users').insert([{
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        full_name: fullName,
-        role
-      }]);
+        options: {
+          data: {
+            full_name: fullName,
+            role: email === "parhlo.pakistan.edu@gmail.com" ? "admin" : "student"
+          }
+        }
+      });
       
       if (error) {
-        alert("Error creating account. Ensure the 'users' table exists in Supabase.");
+        alert("Error creating account: " + error.message);
         return;
       }
-    } else {
-      const { data: user, error } = await supabase.from('users').select('*').eq('email', email).single();
-      fetchedUser = user;
       
-      if (email === "parhlo.pakistan.edu@gmail.com" && (!user || error)) {
+      // Fetch the created/existing user record from public.users
+      const { data: publicUser } = await supabase.from('users').select('*').eq('email', email).single();
+      fetchedUser = publicUser;
+      
+    } else {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      
+      if (error) {
         // Fallback for admin if table is missing or empty
-        const currentAdminPassword = window.localStorage.getItem('parhloAdminPassword') || "parhlo@2003";
-        if (password !== currentAdminPassword) {
-          alert("Incorrect password");
+        if (email === "parhlo.pakistan.edu@gmail.com") {
+          const currentAdminPassword = window.localStorage.getItem('parhloAdminPassword') || "parhlo@2003";
+          if (password !== currentAdminPassword) {
+            alert("Incorrect password");
+            return;
+          }
+        } else {
+          alert("Login failed: " + error.message);
           return;
         }
       } else {
-        if (error || !user) {
-          alert("Account not found. Please sign up.");
-          return;
-        }
-        if (user.password && user.password !== password) {
-          alert("Incorrect password");
-          return;
-        }
+        // Fetch the user record from public.users to get the role
+        const { data: publicUser } = await supabase.from('users').select('*').eq('email', email).single();
+        fetchedUser = publicUser;
       }
     }
 

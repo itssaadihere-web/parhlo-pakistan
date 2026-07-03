@@ -16,6 +16,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { supabase } from '@/utils/supabase';
+import { parsePrice } from '@/utils/currencyHelpers';
 
 export default function TeacherDashboard() {
   const router = useRouter();
@@ -99,7 +100,7 @@ export default function TeacherDashboard() {
         enrichedCourses.forEach(course => {
           const coursePurchases = purchases.filter(p => p.course_slug === course.slug);
           
-          const originalPrice = parseFloat(String(course.price || '0').replace(/[^0-9.]/g, '')) || 0;
+          const originalPrice = parsePrice(course.price);
           const discountPercent = parseFloat(String(course.discount || '0').replace(/[^0-9.]/g, '')) || 0;
           const finalPrice = discountPercent > 0 ? Math.round(originalPrice * (1 - discountPercent / 100)) : originalPrice;
           

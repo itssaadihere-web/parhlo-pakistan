@@ -57,7 +57,7 @@ async function run() {
     const { data: existing } = await supabase.from('users').select('id').eq('email', t.email).single();
     if (existing) {
       console.log(`Teacher ${t.email} already exists. Updating profile...`);
-      const { error } = await supabase.from('users').update({
+      const { data: updateData, error } = await supabase.from('users').update({
         intro: t.intro,
         image: t.image,
         full_name: t.full_name,
@@ -66,10 +66,23 @@ async function run() {
       if (error) console.error("Error updating", t.email, error);
       else console.log(`Updated ${t.email}`);
     } else {
-      console.log(`Inserting ${t.email}...`);
-      const { error } = await supabase.from('users').insert([t]);
-      if (error) console.error("Error inserting", t.email, error);
-      else console.log(`Inserted ${t.email}`);
+      console.log(`Signing up ${t.email}...`);
+      const { data: signUpData, error } = await supabase.auth.signUp({
+        email: t.email,
+        password: t.password,
+        options: {
+          data: {
+            full_name: t.full_name,
+            role: t.role,
+            intro: t.intro,
+            image: t.image
+          }
+        }
+      });
+      if (error) console.error("Error inserting", t.email, error.message);
+      else {
+        console.log(`Inserted ${t.email}`);
+      }
     }
   }
 

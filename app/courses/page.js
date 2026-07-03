@@ -14,7 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { getDeterministicRating } from '@/utils/courseHelpers';
-import { formatCurrency } from '@/utils/currencyHelpers';
+import { formatCurrency, parsePrice } from '@/utils/currencyHelpers';
 import { supabase } from '@/utils/supabase';
 
 export default function AllCourses() {
@@ -85,8 +85,7 @@ export default function AllCourses() {
       setCoursesError(null);
       const persistedCourses = data.map((course) => {
         const studentsCount = parseInt(course.students) || 0;
-        const originalPriceStr = course.price ? String(course.price).replace(/[^0-9.]/g, '') : '0';
-        const originalPrice = parseFloat(originalPriceStr) || 0;
+        const originalPrice = parsePrice(course.price);
         const discountPercent = parseFloat(String(course.discount || '').replace(/[^0-9.]/g, '')) || 0;
         const salePrice = discountPercent > 0 ? Math.round(originalPrice * (1 - discountPercent / 100)) : originalPrice;
         

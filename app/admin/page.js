@@ -23,7 +23,7 @@ import {
 
 import { supabase } from '@/utils/supabase';
 import InactivityTracker from '@/app/components/InactivityTracker';
-import { formatCurrency } from '@/utils/currencyHelpers';
+import { formatCurrency, parsePrice } from '@/utils/currencyHelpers';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -97,7 +97,7 @@ export default function AdminDashboard() {
       const mappedPayments = purchases.map(p => {
         const course = (courses || []).find(c => c.slug === p.course_slug);
         
-        const originalPrice = parseFloat(String(course?.price || '0').replace(/[^0-9.]/g, '')) || 0;
+        const originalPrice = parsePrice(course?.price);
         const discountPercent = parseFloat(String(course?.discount || '0').replace(/[^0-9.]/g, '')) || 0;
         const finalPrice = discountPercent > 0 ? Math.round(originalPrice * (1 - discountPercent / 100)) : originalPrice;
 

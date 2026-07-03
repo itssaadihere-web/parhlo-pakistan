@@ -23,12 +23,10 @@ import {
 
 import { supabase } from '@/utils/supabase';
 import { getDeterministicRating } from '@/utils/courseHelpers';
-import { formatCurrency } from '@/utils/currencyHelpers';
+import { formatCurrency, parsePrice } from '@/utils/currencyHelpers';
 
 const parsePriceValue = (value) => {
-  if (value === undefined || value === null) return 0;
-  const numeric = String(value).replace(/[^0-9.]/g, '');
-  return parseFloat(numeric) || 0;
+  return parsePrice(value);
 };
 
 export default function DynamicCourseDetail() {

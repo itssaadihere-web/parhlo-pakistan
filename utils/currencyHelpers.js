@@ -1,6 +1,12 @@
+export const parsePrice = (value) => {
+  if (value === undefined || value === null) return 0;
+  let cleanValue = String(value).replace(/rs\.?/gi, '').replace(/pkr/gi, '');
+  cleanValue = cleanValue.replace(/,/g, '');
+  const numericValue = parseFloat(cleanValue.replace(/[^0-9.-]/g, ''));
+  return Number.isNaN(numericValue) ? 0 : numericValue;
+};
+
 export const formatCurrency = (value) => {
-  if (value === undefined || value === null) return 'Rs. 0';
-  const numericValue = parseFloat(String(value).replace(/[^0-9.]/g, ''));
-  if (Number.isNaN(numericValue)) return 'Rs. 0';
+  const numericValue = parsePrice(value);
   return `Rs. ${numericValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 };

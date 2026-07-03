@@ -18,7 +18,7 @@ import {
 
 import { supabase } from '@/utils/supabase';
 import { getDeterministicRating } from '@/utils/courseHelpers';
-import { formatCurrency } from '@/utils/currencyHelpers';
+import { formatCurrency, parsePrice } from '@/utils/currencyHelpers';
 
 export default function ParhloPakistan() {
   const router = useRouter();
@@ -70,8 +70,7 @@ export default function ParhloPakistan() {
     } else if (data && data.length > 0) {
       const mappedCourses = data.map(course => {
         const studentsCount = parseInt(course.students) || 0;
-        const originalPriceStr = course.price ? String(course.price).replace(/[^0-9.]/g, '') : '0';
-        const originalPrice = parseFloat(originalPriceStr) || 0;
+        const originalPrice = parsePrice(course.price);
         const discountPercent = parseFloat(String(course.discount || '').replace(/[^0-9.]/g, '')) || 0;
         const salePrice = discountPercent > 0 ? Math.round(originalPrice * (1 - discountPercent / 100)) : originalPrice;
 
