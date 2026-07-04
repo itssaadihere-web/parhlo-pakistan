@@ -16,8 +16,8 @@ USING (true);
 CREATE POLICY "Allow admin all access to courses"
 ON courses FOR ALL
 TO authenticated
-USING ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com')
-WITH CHECK ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com');
+USING (lower(coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com')
+WITH CHECK (lower(coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com');
 
 CREATE POLICY "Allow teachers to update own courses"
 ON courses FOR UPDATE
@@ -68,8 +68,8 @@ WITH CHECK (auth.uid() = id);
 CREATE POLICY "Allow admin all access to users"
 ON users FOR ALL
 TO authenticated
-USING ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com')
-WITH CHECK ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com');
+USING (lower(coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com')
+WITH CHECK (lower(coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com');
 
 CREATE POLICY "Allow service role all access to users"
 ON users FOR ALL
@@ -89,18 +89,18 @@ DROP POLICY IF EXISTS "Allow service role all access to purchases" ON purchases;
 CREATE POLICY "Students can view own purchases"
 ON purchases FOR SELECT
 TO authenticated
-USING (student_email = (coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email'));
+USING (lower(student_email) = lower(coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email'));
 
 CREATE POLICY "Students can insert own purchases"
 ON purchases FOR INSERT
 TO authenticated
-WITH CHECK (student_email = (coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email'));
+WITH CHECK (lower(student_email) = lower(coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email'));
 
 CREATE POLICY "Allow admin all access to purchases"
 ON purchases FOR ALL
 TO authenticated
-USING ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com')
-WITH CHECK ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com');
+USING (lower(coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com')
+WITH CHECK (lower(coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com');
 
 CREATE POLICY "Allow service role all access to purchases"
 ON purchases FOR ALL

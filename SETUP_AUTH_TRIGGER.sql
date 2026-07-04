@@ -32,21 +32,21 @@ DROP POLICY IF EXISTS "Allow admin all access to users" ON users;
 CREATE POLICY "Allow admin all access to users"
 ON users FOR ALL
 TO authenticated
-USING ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com')
-WITH CHECK ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com');
+USING (lower(coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com')
+WITH CHECK (lower(coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com');
 
 -- This policy applies to public.purchases
 DROP POLICY IF EXISTS "Allow admin all access to purchases" ON purchases;
 CREATE POLICY "Allow admin all access to purchases"
 ON purchases FOR ALL
 TO authenticated
-USING ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com')
-WITH CHECK ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com');
+USING (lower(coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com')
+WITH CHECK (lower(coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com');
 
 -- This policy applies to public.courses
 DROP POLICY IF EXISTS "Allow admin all access to courses" ON courses;
 CREATE POLICY "Allow admin all access to courses"
 ON courses FOR ALL
 TO authenticated
-USING ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com')
-WITH CHECK ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com');
+USING (lower(coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com')
+WITH CHECK (lower(coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com');
