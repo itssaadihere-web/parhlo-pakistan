@@ -23,6 +23,10 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
+-- Secure the SECURITY DEFINER function from public REST executions
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM public;
+
+
 
 -- 2. Update RLS policies to allow the Admin to read and write to all tables
 -- Admin email is assumed to be parhlo.pakistan.edu@gmail.com

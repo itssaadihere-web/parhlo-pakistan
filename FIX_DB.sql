@@ -23,3 +23,7 @@ BEGIN
   RETURN new;
 END;
 $$;
+
+-- Secure the SECURITY DEFINER function from public REST executions
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM public;
+
