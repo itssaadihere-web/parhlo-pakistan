@@ -82,6 +82,17 @@ export default function StudentDashboard() {
         .single();
         
       if (userProfile) {
+        if (userProfile.role === 'teacher') {
+          window.localStorage.setItem('parhloRole', 'teacher');
+          router.replace('/teacher');
+          return;
+        }
+        if (userProfile.role === 'admin' || email === "parhlo.pakistan.edu@gmail.com") {
+          window.localStorage.setItem('parhloRole', 'admin');
+          window.localStorage.setItem('parhloAdmin', 'true');
+          router.replace('/admin');
+          return;
+        }
         setStudentName(userProfile.full_name || email.split('@')[0]);
         setPhoneNumber(userProfile.phone || '');
         setIntro(userProfile.intro || '');

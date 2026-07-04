@@ -62,6 +62,7 @@ export default function DynamicCourseDetail() {
   
   // Access Control State
   const [userEmail, setUserEmail] = useState('');
+  const [dashboardUrl, setDashboardUrl] = useState('/dashboard');
   const [paymentStatus, setPaymentStatus] = useState(null); // null | 'pending' | 'approved' | 'suspended'
   const [purchaseRecord, setPurchaseRecord] = useState(null);
   const [isInstallmentDue, setIsInstallmentDue] = useState(false);
@@ -80,7 +81,16 @@ export default function DynamicCourseDetail() {
     if (typeof window !== 'undefined') {
       const email = window.localStorage.getItem('currentUserEmail');
       const isAdmin = window.localStorage.getItem('parhloAdmin') === 'true';
+      const storedRole = window.localStorage.getItem('parhloRole');
       setUserEmail(email || '');
+      
+      if (isAdmin || storedRole === 'admin') {
+        setDashboardUrl('/admin');
+      } else if (storedRole === 'teacher') {
+        setDashboardUrl('/teacher');
+      } else {
+        setDashboardUrl('/dashboard');
+      }
       
       if (isAdmin) {
         setPaymentStatus('approved');
@@ -519,7 +529,7 @@ export default function DynamicCourseDetail() {
           </Link>
           <div className="flex gap-4 items-center">
             {userEmail ? (
-              <Link href="/dashboard" className="text-sm font-bold text-gray-600 hover:text-green-600">Dashboard</Link>
+              <Link href={dashboardUrl} className="text-sm font-bold text-gray-600 hover:text-green-600">Dashboard</Link>
             ) : (
               <button onClick={() => setShowAuthModal(true)} className="text-sm font-bold text-gray-600 hover:text-green-600">Login</button>
             )}

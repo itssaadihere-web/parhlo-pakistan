@@ -26,8 +26,10 @@ export default function AboutPage() {
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
       const isAdmin = window.localStorage.getItem('parhloAdmin') === 'true';
+      const storedRole = window.localStorage.getItem('parhloRole');
       const email = window.localStorage.getItem('currentUserEmail');
-      if (isAdmin) setUserRole('admin');
+      if (isAdmin || storedRole === 'admin') setUserRole('admin');
+      else if (storedRole === 'teacher') setUserRole('teacher');
       else if (email) setUserRole('student');
     }
   }, []);
@@ -36,10 +38,12 @@ export default function AboutPage() {
     setShowAuthModal(true); // Triggers the modal to open
   };
 
-  const handleLoginSuccess = (isAdmin) => {
+  const handleLoginSuccess = (role) => {
     setShowAuthModal(false);
-    if (isAdmin) {
+    if (role === 'admin') {
       router.push('/admin');
+    } else if (role === 'teacher') {
+      router.push('/teacher');
     } else {
       router.push('/dashboard');
     }
@@ -76,6 +80,12 @@ export default function AboutPage() {
               Admin Panel
             </button>
           </Link>
+        ) : userRole === 'teacher' ? (
+          <Link href="/teacher" className="mr-4">
+            <button className="bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-blue-700 transition-all shadow-lg">
+              Teacher Panel
+            </button>
+          </Link>
         ) : userRole === 'student' ? (
           <Link href="/dashboard" className="mr-4">
             <button className="bg-green-600 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-green-700 transition-all shadow-lg">
@@ -102,6 +112,12 @@ export default function AboutPage() {
               <Link href="/admin">
                 <button className="w-full bg-[#064e3b] text-white px-6 py-3 rounded-xl font-bold hover:bg-green-600 transition-all">
                   Admin Panel
+                </button>
+              </Link>
+            ) : userRole === 'teacher' ? (
+              <Link href="/teacher">
+                <button className="w-full bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all">
+                  Teacher Panel
                 </button>
               </Link>
             ) : userRole === 'student' ? (

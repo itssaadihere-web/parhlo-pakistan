@@ -732,22 +732,34 @@ export default function AdminDashboard() {
                     return;
                   }
                   
-                  // Check if user exists
-                  const { data: existing } = await supabase.from('users').select('id').eq('email', newTeacher.email).single();
-                  if (existing) {
-                    setTeacherMessage('User with this email already exists.');
+                  setTeacherMessage('Creating teacher account...');
+                  
+                  // 1. Sign up the teacher in Supabase Auth so they have login credentials
+                  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+                    email: newTeacher.email,
+                    password: newTeacher.password,
+                    options: {
+                      data: {
+                        full_name: newTeacher.name,
+                        role: 'teacher'
+                      }
+                    }
+                  });
+                  
+                  if (signUpError) {
+                    setTeacherMessage('Error creating Auth account: ' + signUpError.message);
                     return;
                   }
                   
-                  const { error } = await supabase.from('users').insert([{
-                    email: newTeacher.email,
-                    password: newTeacher.password,
-                    full_name: newTeacher.name,
-                    role: 'teacher'
-                  }]);
+                  // 2. Re-fetch or update the created user's password in public.users
+                  // (the database trigger handle_new_user automatically copies them to public.users on signUp)
+                  const { error: dbError } = await supabase
+                    .from('users')
+                    .update({ password: newTeacher.password })
+                    .eq('email', newTeacher.email);
                   
-                  if (error) {
-                    setTeacherMessage('Error creating teacher: ' + error.message);
+                  if (dbError) {
+                    setTeacherMessage('Auth account created, but failed to sync password: ' + dbError.message);
                   } else {
                     setTeacherMessage('Teacher created successfully!');
                     fetchData(); // refresh list

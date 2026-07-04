@@ -26,18 +26,27 @@ CREATE TRIGGER on_auth_user_created
 
 -- 2. Update RLS policies to allow the Admin to read and write to all tables
 -- Admin email is assumed to be parhlo.pakistan.edu@gmail.com
+
 -- This policy applies to public.users
 DROP POLICY IF EXISTS "Allow admin all access to users" ON users;
 CREATE POLICY "Allow admin all access to users"
 ON users FOR ALL
 TO authenticated
-USING (auth.jwt() ->> 'email' = 'parhlo.pakistan.edu@gmail.com')
-WITH CHECK (auth.jwt() ->> 'email' = 'parhlo.pakistan.edu@gmail.com');
+USING ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com')
+WITH CHECK ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com');
 
 -- This policy applies to public.purchases
 DROP POLICY IF EXISTS "Allow admin all access to purchases" ON purchases;
 CREATE POLICY "Allow admin all access to purchases"
 ON purchases FOR ALL
 TO authenticated
-USING (auth.jwt() ->> 'email' = 'parhlo.pakistan.edu@gmail.com')
-WITH CHECK (auth.jwt() ->> 'email' = 'parhlo.pakistan.edu@gmail.com');
+USING ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com')
+WITH CHECK ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com');
+
+-- This policy applies to public.courses
+DROP POLICY IF EXISTS "Allow admin all access to courses" ON courses;
+CREATE POLICY "Allow admin all access to courses"
+ON courses FOR ALL
+TO authenticated
+USING ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com')
+WITH CHECK ((coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb ->> 'email') = 'parhlo.pakistan.edu@gmail.com');
