@@ -34,6 +34,7 @@ export default function AdminEditCoursePage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isSticky, setIsSticky] = useState(false);
   const [initialFetchDone, setInitialFetchDone] = useState(false);
 
   const [levelDropdownOpen, setLevelDropdownOpen] = useState(false);
@@ -46,6 +47,7 @@ export default function AdminEditCoursePage() {
   const levelWrapperRef = useRef(null);
   const categoryWrapperRef = useRef(null);
   const instructorWrapperRef = useRef(null);
+  const contentHeaderRef = useRef(null);
   const levelOptions = ['Basic', 'Medium', 'Advance'];
   const [form, setForm] = useState({
     name: '',
@@ -70,6 +72,17 @@ export default function AdminEditCoursePage() {
       return;
     }
     setIsAdmin(true);
+  }, []);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (contentHeaderRef.current) {
+        const rect = contentHeaderRef.current.getBoundingClientRect();
+        setIsSticky(rect.bottom < 0);
+      }
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   useEffect(() => {
@@ -390,8 +403,8 @@ export default function AdminEditCoursePage() {
     return true;
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
+  const handleSubmit = async (event, exitAfterSave = true) => {
+    if (event && event.preventDefault) event.preventDefault();
     if (!validateForm()) return;
 
     setLoading(true);
@@ -442,7 +455,9 @@ export default function AdminEditCoursePage() {
 
       window.localStorage.removeItem(`parhlo_course_draft_${editSlug}`);
       setSuccess('Course updated successfully!');
-      router.push('/admin');
+      if (exitAfterSave) {
+        router.push('/admin');
+      }
     } catch (err) {
       const errString = typeof err === 'object' ? (err.message ? err.message : JSON.stringify(err)) : String(err);
       setError(`Failed to update course. Unexpected error: ${errString}`);
@@ -472,7 +487,7 @@ export default function AdminEditCoursePage() {
             <p className="text-gray-500 max-w-2xl">Update course details and private YouTube lecture links. Demo content is available before payment, and paid lectures will unlock after admin approval.</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-10">
+          <form onSubmit={(e) => handleSubmit(e, true)} className="space-y-10">
             <div className="grid gap-4 lg:grid-cols-2">
               <label className="block">
                 <span className="text-sm font-bold text-gray-700">Course Name</span>
@@ -628,10 +643,31 @@ export default function AdminEditCoursePage() {
                   className="mt-3 w-full rounded-3xl border border-gray-200 bg-white px-5 py-4 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
                 />
               </label>
+              <div className="flex items-end justify-end gap-3 pb-1 mt-4 lg:mt-0">
+                <Link href="/admin" className="inline-flex justify-center items-center rounded-full border border-gray-200 px-6 py-3.5 font-bold text-gray-600 hover:bg-gray-100 transition-all text-sm min-w-[100px]">
+                  Cancel
+                </Link>
+                <button
+                  type="button"
+                  onClick={(e) => handleSubmit(e, false)}
+                  disabled={loading}
+                  className="inline-flex justify-center items-center rounded-full border border-green-600 px-6 py-3.5 font-bold text-green-700 hover:bg-green-50 transition-all text-sm min-w-[100px] disabled:opacity-50"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleSubmit(e, true)}
+                  disabled={loading}
+                  className="inline-flex justify-center items-center rounded-full bg-[#064e3b] px-6 py-3.5 font-bold text-white hover:bg-green-700 transition-all text-sm min-w-[120px] disabled:opacity-50"
+                >
+                  {loading ? 'Saving...' : 'Save & Exit'}
+                </button>
+              </div>
             </div>
 
             <div className="rounded-[2rem] border border-gray-200 bg-gray-50 p-8">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-6" ref={contentHeaderRef}>
                 <div>
                   <h2 className="text-2xl font-black text-slate-900">Content</h2>
                   <p className="text-gray-500 text-sm">Add or edit lectures. You can also add quizzes (Google Form links).</p>
@@ -709,17 +745,7 @@ export default function AdminEditCoursePage() {
             {error && <div className="rounded-3xl border border-red-200 bg-red-50 px-6 py-4 text-red-700">{error}</div>}
             {success && <div className="rounded-3xl border border-green-200 bg-green-50 px-6 py-4 text-green-700">{success}</div>}
 
-            <div className="flex flex-col gap-4 sm:flex-row sm:justify-end">
-              <Link href="/admin" className="inline-flex justify-center rounded-full border border-gray-200 px-8 py-4 font-bold text-gray-700 hover:bg-gray-100 transition-all">
-                Cancel
-              </Link>
-              <button type="button" onClick={handleSaveProgress} className="inline-flex justify-center rounded-full border border-green-600 px-8 py-4 font-bold text-green-700 hover:bg-green-50 transition-all">
-                Save Progress
-              </button>
-              <button type="submit" className="inline-flex justify-center rounded-full bg-[#064e3b] px-8 py-4 font-black text-white hover:bg-green-600 transition-all">
-                Update course
-              </button>
-            </div>
+
           </form>
 
           <div className="mt-14 rounded-[2rem] border border-gray-200 bg-white p-8 shadow-sm">
@@ -767,6 +793,66 @@ export default function AdminEditCoursePage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Floating Sticky Actions Bar */}
+      <div className={`fixed top-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-7xl z-50 transition-all duration-300 transform ${isSticky ? 'translate-y-0 opacity-100' : '-translate-y-24 opacity-0 pointer-events-none'}`}>
+        <div className="bg-white/90 backdrop-blur-md border border-gray-200 shadow-xl rounded-3xl py-3 px-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-700">
+              <ClipboardList size={16} />
+            </span>
+            <div>
+              <h3 className="text-sm font-black text-slate-900 leading-tight">
+                {form.name ? `Editing: ${form.name}` : 'Edit Course'}
+              </h3>
+              <p className="text-xs text-gray-500 font-medium">Quick actions panel</p>
+            </div>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+            {/* Subject Actions */}
+            <div className="flex items-center gap-2 border-r border-gray-200 pr-3 mr-1">
+              <Link href="/admin" className="inline-flex justify-center items-center rounded-full border border-gray-200 px-4 py-2 font-bold text-gray-600 hover:bg-gray-100 transition-all text-xs">
+                Cancel
+              </Link>
+              <button
+                type="button"
+                onClick={(e) => handleSubmit(e, false)}
+                disabled={loading}
+                className="inline-flex justify-center items-center rounded-full border border-green-600 px-4 py-2 font-bold text-green-700 hover:bg-green-50 transition-all text-xs disabled:opacity-50"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={(e) => handleSubmit(e, true)}
+                disabled={loading}
+                className="inline-flex justify-center items-center rounded-full bg-[#064e3b] px-4 py-2 font-bold text-white hover:bg-green-700 transition-all text-xs disabled:opacity-50"
+              >
+                {loading ? 'Saving...' : 'Save & Exit'}
+              </button>
+            </div>
+            
+            {/* Content Actions */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={addLecture}
+                className="inline-flex items-center gap-1.5 rounded-full bg-green-600 px-4 py-2 text-white font-bold hover:bg-green-700 transition-all text-xs"
+              >
+                <Plus size={14} /> Add Lecture
+              </button>
+              <button
+                type="button"
+                onClick={addQuiz}
+                className="inline-flex items-center gap-1.5 rounded-full border border-green-600 text-green-600 px-4 py-2 font-bold hover:bg-green-50 transition-all text-xs"
+              >
+                <Plus size={14} /> Add Quiz
+              </button>
             </div>
           </div>
         </div>
