@@ -66,6 +66,7 @@ export default function DynamicCourseDetail() {
   const [paymentStatus, setPaymentStatus] = useState(null); // null | 'pending' | 'approved' | 'suspended'
   const [purchaseRecord, setPurchaseRecord] = useState(null);
   const [isInstallmentDue, setIsInstallmentDue] = useState(false);
+  const [activeOffer, setActiveOffer] = useState(null);
   
   // Video Player State
   const [previewLecture, setPreviewLecture] = useState(null);
@@ -124,6 +125,31 @@ export default function DynamicCourseDetail() {
           setPurchaseRecord(null);
           setIsInstallmentDue(false);
         }
+
+        // Fetch active sales offer for this student & course
+        let foundOffer = null;
+        try {
+          const { data: dbOffer } = await supabase
+            .from('sales_offers')
+            .select('*')
+            .eq('student_email', email.toLowerCase())
+            .eq('course_slug', slug)
+            .eq('status', 'active')
+            .single();
+          if (dbOffer) foundOffer = dbOffer;
+        } catch (e) {}
+
+        if (!foundOffer) {
+          try {
+            const localOffers = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
+            foundOffer = localOffers.find(o => 
+              o.student_email?.toLowerCase() === email.toLowerCase() && 
+              o.course_slug === slug && 
+              o.status === 'active'
+            );
+          } catch (e) {}
+        }
+        setActiveOffer(foundOffer || null);
 
         // Fetch user profile to pre-fill payment modal
         const { data: userProfile } = await supabase.from('users').select('full_name, phone').eq('email', email).single();
@@ -317,12 +343,120 @@ export default function DynamicCourseDetail() {
     }
   };
 
+  const submitFreeTrialActivation = async () => {
+    setLoading(true);
+    try {
+      const origPrice = courseData?.rawOriginalPrice || 7000;
+      const monthlyInst = Math.round(origPrice / 3);
+
+      const newPurchase = {
+        student_email: userEmail,
+        course_slug: courseData.slug,
+        status: 'approved',
+        payment_plan: 'free_trial',
+        amount_paid: 0,
+        total_price: origPrice,
+        monthly_installment_amount: monthlyInst,
+        installments_paid: 0,
+        next_due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        offer_id: activeOffer?.id
+      };
+
+      const { error } = await supabase.from('purchases').insert([newPurchase]);
+      if (error) console.warn("Supabase insert warning:", error);
+
+      // Redeem offer
+      if (activeOffer?.id) {
+        try {
+          await supabase.from('sales_offers').update({ status: 'redeemed' }).eq('id', activeOffer.id);
+        } catch (e) {}
+        try {
+          const local = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
+          const updated = local.map(o => o.id === activeOffer.id ? { ...o, status: 'redeemed' } : o);
+          window.localStorage.setItem('parhlo_sales_offers', JSON.stringify(updated));
+        } catch (e) {}
+      }
+
+      setPaymentStatus('approved');
+      setPurchaseRecord(newPurchase);
+      setShowPaymentModal(false);
+      alert("1-Month Free Access Activated! You can watch up to 1/12th of total course video duration during your trial. Your 1st & 2nd month installments will be due after 30 days.");
+    } catch (err) {
+      console.error("Free trial error:", err);
+      alert("Failed to activate 1-Month Free Access. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getCurrentWeekKey = () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 1);
+    const dayOfYear = Math.floor((now - start) / (24 * 60 * 60 * 1000));
+    const weekNum = Math.ceil((dayOfYear + start.getDay() + 1) / 7);
+    return `${now.getFullYear()}_W${weekNum}`;
+  };
+
   const openPreview = (index) => {
     const item = courseData.curriculum[index];
     if (!item.isFree && paymentStatus !== 'approved') {
       alert("You need to purchase this course to view this lecture.");
       return;
     }
+
+    const plan = purchaseRecord?.payment_plan || 'full';
+
+    // Full Payment plan has UNRESTRICTED full access with NO limits
+    if (plan !== 'full') {
+      const totalCourseSeconds = (courseData?.curriculum || []).reduce((acc, lec) => {
+        if (lec.duration && lec.duration.includes('min')) {
+          return acc + (parseInt(lec.duration) || 15) * 60;
+        }
+        return acc + 900;
+      }, 0);
+
+      const weeklyLimitSeconds = Math.max(300, Math.round(totalCourseSeconds / 12)); // 1/12th per week
+      const monthlyFreeLimitSeconds = Math.max(900, Math.round(totalCourseSeconds / 3)); // 1/3rd in 1-month free trial
+
+      // Calculate total watched seconds
+      const keyTotal = `parhlo_watch_${userEmail}_${courseData.slug}`;
+      let totalWatched = 0;
+      try {
+        const watchMap = JSON.parse(window.localStorage.getItem(keyTotal) || '{}');
+        totalWatched = Object.values(watchMap).reduce((a, b) => a + (Number(b) || 0), 0);
+      } catch (e) {}
+
+      // Calculate weekly watched seconds
+      const weekKey = `parhlo_weekly_${userEmail}_${courseData.slug}`;
+      const currentWeekId = getCurrentWeekKey();
+      let weeklyWatched = 0;
+      try {
+        const weeklyMap = JSON.parse(window.localStorage.getItem(weekKey) || '{}');
+        weeklyWatched = Number(weeklyMap[currentWeekId]) || 0;
+      } catch (e) {}
+
+      // 1. Check 1-Month Free Access Total Quota (1/3rd limit)
+      if (plan === 'free_trial' && totalWatched >= monthlyFreeLimitSeconds) {
+        alert(
+          `🚀 1-Month Free Access Quota Completed!\n\n` +
+          `You have completed your 1-Month Free Access allowance (${Math.round(totalWatched / 60)} min / ${Math.round(monthlyFreeLimitSeconds / 60)} min quota).\n\n` +
+          `Your 1st month free access period is complete! To unlock your remaining course modules for Month 2 & 3, please complete your 1st & 2nd month installment payments in your dashboard.`
+        );
+        return;
+      }
+
+      // 2. Check Weekly Pace Quota (1/12th limit per week)
+      if (weeklyWatched >= weeklyLimitSeconds) {
+        alert(
+          `📚 Weekly Study Quota Completed!\n\n` +
+          `"Learning is a marathon, not a sprint."\n\n` +
+          `You have successfully finished your recommended weekly study quota (${Math.round(weeklyWatched / 60)} min / ${Math.round(weeklyLimitSeconds / 60)} min limit) for this week.\n\n` +
+          `To optimize retention and match your brain's natural cognitive learning curve, take time to digest this week's material and return next week to continue your learning journey!`
+        );
+        return;
+      }
+    }
+
     setPreviewLecture(index);
     setShowPreviewOverlay(true);
   };
@@ -350,10 +484,12 @@ export default function DynamicCourseDetail() {
     let interval;
     if (showPreviewOverlay && userEmail && courseData && previewItem) {
       interval = setInterval(() => {
-        const key = `parhlo_watch_${userEmail}_${courseData.slug}`;
+        const plan = purchaseRecord?.payment_plan || 'full';
+        
+        const keyTotal = `parhlo_watch_${userEmail}_${courseData.slug}`;
         let progressData = {};
         try {
-          progressData = JSON.parse(window.localStorage.getItem(key) || '{}');
+          progressData = JSON.parse(window.localStorage.getItem(keyTotal) || '{}');
           if (typeof progressData !== 'object' || progressData === null) progressData = {};
         } catch (e) {
           progressData = {};
@@ -362,20 +498,31 @@ export default function DynamicCourseDetail() {
         const lectureId = String(previewItem.id);
         const currentSeconds = progressData[lectureId] || 0;
         
-        let maxSeconds = 900; // default 15 mins
+        let maxSeconds = 900;
         if (previewItem.duration && previewItem.duration.includes('min')) {
            maxSeconds = (parseInt(previewItem.duration) || 15) * 60;
         }
 
-        // Cap the max watch time for a lecture so replays don't increase it indefinitely
         if (currentSeconds < maxSeconds) {
            progressData[lectureId] = currentSeconds + 10;
-           window.localStorage.setItem(key, JSON.stringify(progressData));
+           window.localStorage.setItem(keyTotal, JSON.stringify(progressData));
+
+           if (plan !== 'full') {
+             const weekKey = `parhlo_weekly_${userEmail}_${courseData.slug}`;
+             const currentWeekId = getCurrentWeekKey();
+             let weeklyMap = {};
+             try {
+               weeklyMap = JSON.parse(window.localStorage.getItem(weekKey) || '{}');
+             } catch (e) {}
+             const currentWeeklySec = Number(weeklyMap[currentWeekId]) || 0;
+             weeklyMap[currentWeekId] = currentWeeklySec + 10;
+             window.localStorage.setItem(weekKey, JSON.stringify(weeklyMap));
+           }
         }
       }, 10000);
     }
     return () => clearInterval(interval);
-  }, [showPreviewOverlay, userEmail, courseData, previewItem]);
+  }, [showPreviewOverlay, userEmail, courseData, previewItem, purchaseRecord]);
 
   if (loading) {
     return (
@@ -420,6 +567,41 @@ export default function DynamicCourseDetail() {
             <div className="flex-1 border-b md:border-b-0 md:border-r border-gray-100 pb-8 md:pb-0 md:pr-10">
               <div className="w-14 h-14 bg-green-50 rounded-2xl flex items-center justify-center text-green-600 mb-6"><CreditCard size={28} /></div>
               
+              {activeOffer && (
+                <div className="bg-emerald-900 text-white p-5 rounded-2xl mb-6 shadow-lg border border-emerald-500/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-500 text-slate-950 px-2.5 py-0.5 rounded-full">
+                      Private Offer
+                    </span>
+                    <span className="text-xs text-emerald-200">Issued by {activeOffer.sales_email}</span>
+                  </div>
+                  <h4 className="font-black text-lg text-white">Special Private Offer Just For You!</h4>
+                  {activeOffer.offer_type === 'added_discount' && (
+                    <p className="text-xs text-emerald-100">
+                      You have received an additional <strong>{activeOffer.discount_percent}% discount</strong> on this course.
+                    </p>
+                  )}
+                  {activeOffer.offer_type === 'free_month_trial' && (
+                    <div className="space-y-3 pt-1">
+                      <p className="text-xs text-emerald-100">
+                        Get <strong>1-Month Free Access</strong> with <strong>Rs. 0 initial payment today</strong>. Your 1st installment is delayed to month 2 and will be paid together with your 2nd installment. 
+                      </p>
+                      <button
+                        onClick={submitFreeTrialActivation}
+                        className="w-full bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black py-3 rounded-xl shadow-md transition-all uppercase tracking-wider text-xs flex items-center justify-center gap-2"
+                      >
+                        Claim 1-Month Free Access Now (Rs. 0)
+                      </button>
+                    </div>
+                  )}
+                  {activeOffer.offer_type === 'discounted_installment' && (
+                    <p className="text-xs text-emerald-100">
+                      Special Monthly Installment Rate: <strong>Rs. {activeOffer.custom_installment_amount?.toLocaleString()} / month</strong>
+                    </p>
+                  )}
+                </div>
+              )}
+
               {isInstallmentDue ? (
                 <>
                   <h3 className="text-2xl font-black mb-1 text-slate-900">Pay Next Installment</h3>
@@ -435,18 +617,29 @@ export default function DynamicCourseDetail() {
                       className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${paymentMode === 'full' ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-green-200'}`}
                     >
                       <p className="text-sm font-bold text-gray-900 mb-1">Pay in Full</p>
-                      <p className="text-xs text-green-600 font-bold">{courseData.salePrice}</p>
+                      <p className="text-xs text-green-600 font-bold">
+                        {activeOffer?.offer_type === 'added_discount' ? formatCurrency(activeOffer.custom_total_price) : courseData.salePrice}
+                      </p>
                     </div>
                     <div 
                       onClick={() => setPaymentMode('installment')} 
                       className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${paymentMode === 'installment' ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-green-200'}`}
                     >
                       <p className="text-sm font-bold text-gray-900 mb-1">3 Installments</p>
-                      <p className="text-xs text-green-600 font-bold">Rs. {Math.round(courseData.rawOriginalPrice / 3).toLocaleString()} /mo</p>
+                      <p className="text-xs text-green-600 font-bold">
+                        Rs. {activeOffer?.offer_type === 'discounted_installment' ? activeOffer.custom_installment_amount?.toLocaleString() : Math.round(courseData.rawOriginalPrice / 3).toLocaleString()} /mo
+                      </p>
                     </div>
                   </div>
 
-                  <p className="text-gray-500 mb-8 text-sm font-medium">Send <span className="font-bold text-gray-900 text-lg">{paymentMode === 'full' ? courseData.salePrice : `Rs. ${Math.round(courseData.rawOriginalPrice / 3).toLocaleString()}`}</span> to the details below.</p>
+                  <p className="text-gray-500 mb-8 text-sm font-medium">
+                    Send <span className="font-bold text-gray-900 text-lg">
+                      {paymentMode === 'full' 
+                        ? (activeOffer?.offer_type === 'added_discount' ? formatCurrency(activeOffer.custom_total_price) : courseData.salePrice)
+                        : `Rs. ${activeOffer?.offer_type === 'discounted_installment' ? activeOffer.custom_installment_amount?.toLocaleString() : Math.round(courseData.rawOriginalPrice / 3).toLocaleString()}`
+                      }
+                    </span> to the details below.
+                  </p>
                 </>
               )}
 

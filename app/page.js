@@ -35,6 +35,8 @@ export default function ParhloPakistan() {
     setShowAuthModal(false);
     if (role === 'admin') {
       router.push('/admin');
+    } else if (role === 'sales') {
+      router.push('/sales');
     } else if (role === 'teacher') {
       router.push('/teacher');
     } else {
@@ -48,6 +50,7 @@ export default function ParhloPakistan() {
       const storedRole = window.localStorage.getItem('parhloRole');
       const email = window.localStorage.getItem('currentUserEmail');
       if (isAdmin || storedRole === 'admin') setUserRole('admin');
+      else if (storedRole === 'sales') setUserRole('sales');
       else if (storedRole === 'teacher') setUserRole('teacher');
       else if (email) setUserRole('student');
 

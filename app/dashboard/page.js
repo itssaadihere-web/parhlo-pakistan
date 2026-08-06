@@ -26,6 +26,7 @@ export default function StudentDashboard() {
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [pendingPayments, setPendingPayments] = useState([]);
   const [studentName, setStudentName] = useState('Student');
+  const [totalStudyHours, setTotalStudyHours] = useState('0');
   const [userEmail, setUserEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [intro, setIntro] = useState('');
@@ -132,6 +133,8 @@ export default function StudentDashboard() {
 
         if (!coursesError && adminCourses) {
           const approved = userPurchases.filter(p => p.status === 'approved');
+          let totalStudySecondsAll = 0;
+
           const activeCourses = approved.map(purchase => {
             const course = adminCourses.find(c => c.slug === purchase.course_slug);
             if (!course) return null;
@@ -157,6 +160,7 @@ export default function StudentDashboard() {
                }
             });
 
+            totalStudySecondsAll += watchedSeconds;
             completedLectures = Math.min(totalLectures, completedLectures);
 
             let estimatedTotalSeconds = 0;
@@ -172,17 +176,49 @@ export default function StudentDashboard() {
 
             const progressPct = Math.min(100, Math.floor((watchedSeconds / estimatedTotalSeconds) * 100));
 
+            // Calculate weekly watched seconds
+            const now = new Date();
+            const startOfYear = new Date(now.getFullYear(), 0, 1);
+            const dayOfYear = Math.floor((now - startOfYear) / (24 * 60 * 60 * 1000));
+            const weekNum = Math.ceil((dayOfYear + startOfYear.getDay() + 1) / 7);
+            const currentWeekId = `${now.getFullYear()}_W${weekNum}`;
+
+            const weekKey = `parhlo_weekly_${email}_${course.slug}`;
+            let weeklyWatchedSec = 0;
+            try {
+              const weeklyMap = JSON.parse(window.localStorage.getItem(weekKey) || '{}');
+              weeklyWatchedSec = Number(weeklyMap[currentWeekId]) || 0;
+            } catch (e) {}
+
+            const weeklyLimitSeconds = Math.round(estimatedTotalSeconds / 12);
+            const oneMonthFreeLimitSeconds = Math.round(estimatedTotalSeconds / 3);
+
             return {
+              id: purchase.id,
               title: course.name,
               slug: course.slug,
               category: course.category || 'Course',
               progress: progressPct,
               totalLectures: totalLectures,
               completedLectures: completedLectures,
+              watchedSeconds: watchedSeconds,
+              watchedHours: (watchedSeconds / 3600).toFixed(1),
+              weeklyWatchedSec: weeklyWatchedSec,
+              weeklyLimitSeconds: weeklyLimitSeconds,
+              oneMonthFreeLimitSeconds: oneMonthFreeLimitSeconds,
+              paymentPlan: purchase.payment_plan || 'full',
+              isFreeTrial: isFreeTrial,
+              totalCoursePrice: totalCoursePrice,
+              monthlyInstallment: monthlyInst,
+              amountPaid: amountPaid,
+              remainingReceivable: remainingReceivable,
+              nextDueDate: purchase.next_due_date ? new Date(purchase.next_due_date).toLocaleDateString() : null,
               imageClass: 'from-slate-900 via-slate-700 to-green-600'
             };
           }).filter(Boolean);
+
           setEnrolledCourses(activeCourses);
+          setTotalStudyHours((totalStudySecondsAll / 3600).toFixed(1));
         }
       }
     };
@@ -324,11 +360,11 @@ export default function StudentDashboard() {
               <p className="text-gray-500 font-medium">Track your learning progress and manage your enrollments.</p>
             </header>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-10">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mb-10">
               {[
                 { label: 'Active Subjects', val: enrolledCourses.length, color: 'bg-blue-50 text-blue-600' },
                 { label: 'Pending Approvals', val: pendingPayments.length, color: 'bg-amber-50 text-amber-600' },
-                { label: 'Study Hours', val: '0', color: 'bg-purple-50 text-purple-600' },
+                { label: 'Study Hours Watched', val: `${totalStudyHours} hrs`, color: 'bg-purple-50 text-purple-600' },
               ].map((stat, i) => (
                 <div key={i} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm text-center md:text-left flex flex-col md:flex-row items-center gap-4">
                   <div className={`p-4 rounded-2xl ${stat.color}`}>
@@ -341,6 +377,78 @@ export default function StudentDashboard() {
                 </div>
               ))}
             </div>
+
+            {/* Receivables & Free Access Status Summary */}
+            {enrolledCourses.length > 0 && (
+              <div className="mb-10 bg-gradient-to-r from-slate-900 to-emerald-950 text-white rounded-[2.5rem] p-8 shadow-xl border border-emerald-500/30">
+                <h2 className="text-xl font-black text-white mb-2 flex items-center gap-2">
+                  <Award size={24} className="text-emerald-400" />
+                  Receivable & Plan Summary
+                </h2>
+                <p className="text-xs text-slate-300 mb-6">Overview of your enrolled subject payment plans, remaining receivables, and watch limits.</p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {enrolledCourses.map(c => {
+                    const isWeeklyQuotaReached = c.paymentPlan !== 'full' && c.weeklyWatchedSec >= c.weeklyLimitSeconds;
+                    const isMonthlyFreeTrialEnded = c.isFreeTrial && c.watchedSeconds >= c.oneMonthFreeLimitSeconds;
+                    const isLocked = isWeeklyQuotaReached || isMonthlyFreeTrialEnded;
+
+                    return (
+                      <div key={c.slug} className="bg-slate-900/90 border border-slate-700/80 p-5 rounded-2xl space-y-3">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-sm font-bold text-white block">{c.title}</span>
+                            <span className="text-[11px] text-emerald-400 font-mono capitalize font-bold">
+                              {c.isFreeTrial ? '1-Month Free Access (0 PKR Initial)' : `${c.paymentPlan} Plan`}
+                            </span>
+                          </div>
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            isLocked ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          }`}>
+                            {c.paymentPlan === 'full' ? 'Full Access' : isMonthlyFreeTrialEnded ? 'Month 1 Trial Ended' : isWeeklyQuotaReached ? 'Weekly Quota Met' : 'Active'}
+                          </span>
+                        </div>
+
+                        {c.paymentPlan !== 'full' && (
+                          <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs space-y-1.5">
+                            <div className="flex justify-between text-slate-300">
+                              <span>Weekly Pace Quota (1/12th):</span>
+                              <span className="font-mono text-emerald-400">
+                                {Math.round(c.weeklyWatchedSec / 60)}m / {Math.round(c.weeklyLimitSeconds / 60)}m this week
+                              </span>
+                            </div>
+
+                            {c.isFreeTrial && (
+                              <>
+                                <div className="flex justify-between text-slate-300">
+                                  <span>1-Month Free Quota (1/3rd):</span>
+                                  <span className="font-mono text-amber-400">
+                                    {Math.round(c.watchedSeconds / 60)}m / {Math.round(c.oneMonthFreeLimitSeconds / 60)}m quota
+                                  </span>
+                                </div>
+                                <div className="flex justify-between text-slate-300 text-[11px] pt-1 border-t border-slate-800">
+                                  <span>Next Due (1st + 2nd Inst.):</span>
+                                  <span className="font-bold text-amber-300">Rs. {(c.monthlyInstallment * 2).toLocaleString()}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between text-xs pt-1">
+                          <span className="text-slate-400">Total Watched: <strong className="text-white">{c.watchedHours} hrs</strong></span>
+                          <Link href={`/courses/${c.slug}`}>
+                            <button className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-1.5 rounded-lg text-xs transition-colors">
+                              {isMonthlyFreeTrialEnded ? 'Pay to Unlock' : isWeeklyQuotaReached ? 'Weekly Limit Reached' : 'Study Now'}
+                            </button>
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {pendingPayments.length > 0 && (
               <div className="mb-10 bg-amber-50 border border-amber-200 rounded-[2.5rem] p-8">

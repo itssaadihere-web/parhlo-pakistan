@@ -81,8 +81,16 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
     }
 
     let finalRole = 'student';
-    if (email === "parhlo.pakistan.edu@gmail.com") finalRole = 'admin';
-    else if (authMode !== 'signup' && fetchedUser?.role) finalRole = fetchedUser.role;
+    const salesEmails = ['faiz.ali@parhlopakistan.com.pk', 'nabiha.irfan@parhlopakistan.com.pk'];
+    const lowerEmail = (email || '').toLowerCase().trim();
+
+    if (lowerEmail === "parhlo.pakistan.edu@gmail.com") {
+      finalRole = 'admin';
+    } else if (salesEmails.includes(lowerEmail)) {
+      finalRole = 'sales';
+    } else if (authMode !== 'signup' && fetchedUser?.role) {
+      finalRole = fetchedUser.role;
+    }
 
     const isAdmin = finalRole === 'admin';
     if (typeof window !== 'undefined') {

@@ -100,15 +100,25 @@ export default function TeacherDashboard() {
         enrichedCourses.forEach(course => {
           const coursePurchases = purchases.filter(p => p.course_slug === course.slug);
           
-          const originalPrice = parsePrice(course.price);
-          const discountPercent = parseFloat(String(course.discount || '0').replace(/[^0-9.]/g, '')) || 0;
-          const finalPrice = discountPercent > 0 ? Math.round(originalPrice * (1 - discountPercent / 100)) : originalPrice;
-          
-          const courseRevenue = coursePurchases.length * finalPrice;
-          course.earnedRevenue = courseRevenue;
+          let courseCollectedRev = 0;
+          coursePurchases.forEach(p => {
+            if (p.payment_plan === 'free_trial' && (!p.amount_paid || p.amount_paid === 0)) {
+              courseCollectedRev += 0; // 0 PKR collected during 1-Month Free Access period
+            } else if (p.amount_paid !== undefined && p.amount_paid !== null && p.amount_paid !== '') {
+              courseCollectedRev += Number(p.amount_paid);
+            } else {
+              const originalPrice = parsePrice(course.price);
+              const discountPercent = parseFloat(String(course.discount || '0').replace(/[^0-9.]/g, '')) || 0;
+              const finalPrice = discountPercent > 0 ? Math.round(originalPrice * (1 - discountPercent / 100)) : originalPrice;
+              courseCollectedRev += finalPrice;
+            }
+          });
+
+          course.earnedRevenue = courseCollectedRev;
           course.enrolledStudents = coursePurchases.length;
+          course.purchasesList = coursePurchases;
           
-          totalRev += courseRevenue;
+          totalRev += courseCollectedRev;
           studentsCount += coursePurchases.length;
         });
       }
