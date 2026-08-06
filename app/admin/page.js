@@ -129,10 +129,25 @@ export default function AdminDashboard() {
       .eq('role', 'teacher')
       .order('created_at', { ascending: false });
     
+    const DEFAULT_TEACHERS = [
+      { email: 'farazsohail18@gmail.com', full_name: 'Dr. M Faraz Sohail', role: 'teacher', intro: 'Dr. M. Faraz Sohail — Biology Instructor (Class 9 Sindh Board)' },
+      { email: 'vaniya.ahmed.18@gmail.com', full_name: 'Dr. Vaniya Ahmed', role: 'teacher', intro: 'Dr. Vaniya Ahmed — Chemistry Instructor (Class 9 Sindh Board)' },
+      { email: 'khadijaaqeelahmed20@gmail.com', full_name: 'Dr. Khadija Aqeel Ahmed', role: 'teacher', intro: 'Dr. Khadija Aqeel — Physics Instructor (Class 9 Sindh Board)' },
+      { email: 'muhammadzubair6879@gmail.com', full_name: 'M. Zubair Yousif', role: 'teacher', intro: 'Muhammad Zubair — English Instructor (Class 9 Sindh Board)' }
+    ];
+
+    let mergedTeachers = teachersData || [];
+    for (const dt of DEFAULT_TEACHERS) {
+      if (!mergedTeachers.some(t => t.email?.toLowerCase() === dt.email.toLowerCase())) {
+        mergedTeachers.push(dt);
+      }
+    }
+
     if (teachersError) {
       console.error('Error fetching teachers:', teachersError);
+      setTeachers(mergedTeachers);
     } else {
-      setTeachers(teachersData || []);
+      setTeachers(mergedTeachers);
     }
 
     // Fetch students
