@@ -71,6 +71,11 @@ export default function AdminDashboard() {
   const [selectedLead, setSelectedLead] = useState(null);
   const [allActivities, setAllActivities] = useState([]);
 
+  // Sales Rep Management State
+  const [newSalesRep, setNewSalesRep] = useState({ name: '', email: '', password: '' });
+  const [salesRepMsg, setSalesRepMsg] = useState('');
+  const [bulkAssignTarget, setBulkAssignTarget] = useState('round_robin');
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const admin = window.localStorage.getItem('parhloAdmin') === 'true';
@@ -235,6 +240,87 @@ export default function AdminDashboard() {
     const updated = crmLeads.filter(l => l.id !== leadId);
     setCrmLeads(updated);
     window.localStorage.setItem('parhlo_leads', JSON.stringify(updated));
+  };
+
+  const handleBulkAssignUnassigned = async () => {
+    const unassignedLeads = crmLeads.filter(l => !l.assigned_to);
+    if (unassignedLeads.length === 0) {
+      alert("No unassigned leads found to assign.");
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to assign ${unassignedLeads.length} unassigned leads?`)) return;
+
+    let updatedLeads = [...crmLeads];
+    const activeReps = salesReps.length > 0 ? salesReps.map(r => r.email) : ['faiz.ali@parhlopakistan.com.pk', 'nabiha.irfan@parhlopakistan.com.pk'];
+
+    if (bulkAssignTarget === 'round_robin') {
+      let repIdx = 0;
+      for (let lead of unassignedLeads) {
+        const assignedTo = activeReps[repIdx % activeReps.length];
+        repIdx++;
+        try {
+          await supabase.from('leads').update({ assigned_to: assignedTo, updated_at: new Date().toISOString() }).eq('id', lead.id);
+        } catch (e) {}
+        updatedLeads = updatedLeads.map(l => l.id === lead.id ? { ...l, assigned_to: assignedTo } : l);
+      }
+    } else {
+      try {
+        const unassignedIds = unassignedLeads.map(l => l.id);
+        await supabase.from('leads').update({ assigned_to: bulkAssignTarget, updated_at: new Date().toISOString() }).in('id', unassignedIds);
+      } catch (e) {}
+      updatedLeads = updatedLeads.map(l => !l.assigned_to ? { ...l, assigned_to: bulkAssignTarget } : l);
+    }
+
+    setCrmLeads(updatedLeads);
+    window.localStorage.setItem('parhlo_leads', JSON.stringify(updatedLeads));
+    alert(`Successfully assigned ${unassignedLeads.length} leads!`);
+  };
+
+  const handleAddSalesRep = async () => {
+    if (!newSalesRep.name || !newSalesRep.email || !newSalesRep.password) {
+      setSalesRepMsg('Please fill all fields.');
+      return;
+    }
+
+    setSalesRepMsg('Creating Sales Representative account...');
+
+    const emailClean = newSalesRep.email.trim().toLowerCase();
+
+    // 1. Sign up in Supabase Auth
+    try {
+      await supabase.auth.signUp({
+        email: emailClean,
+        password: newSalesRep.password,
+        options: {
+          data: {
+            full_name: newSalesRep.name,
+            role: 'sales'
+          }
+        }
+      });
+    } catch (e) {}
+
+    // 2. Upsert in public.users
+    const newRepObj = {
+      email: emailClean,
+      full_name: newSalesRep.name,
+      role: 'sales',
+      password: newSalesRep.password
+    };
+
+    try {
+      await supabase.from('users').upsert([newRepObj], { onConflict: 'email' });
+    } catch (dbErr) {
+      console.warn("DB update fallback:", dbErr);
+    }
+
+    const updatedReps = [...salesReps.filter(r => r.email !== emailClean), newRepObj];
+    setSalesReps(updatedReps);
+
+    setSalesRepMsg('Sales Representative successfully created!');
+    setNewSalesRep({ name: '', email: '', password: '' });
+    setTimeout(() => setSalesRepMsg(''), 4000);
   };
 
   const handleLogout = async () => {
@@ -419,6 +505,7 @@ export default function AdminDashboard() {
   const menuItems = [
     { name: 'Dashboard', icon: <Globe size={20} />, id: 'dashboard' },
     { name: 'CRM Kanban & Leads', icon: <FileSpreadsheet size={20} />, id: 'crm' },
+    { name: 'Sales Team & Reps', icon: <UserCheck size={20} />, id: 'sales_team' },
     { name: 'Sales Performance', icon: <TrendingUp size={20} />, id: 'sales_performance' },
     { name: 'Private Offers', icon: <Tag size={20} />, id: 'sales' },
     { name: 'Study Analytics', icon: <BarChart size={20} />, id: 'analytics' },
@@ -582,6 +669,43 @@ export default function AdminDashboard() {
               onImportSuccess={(newLeads) => setCrmLeads([...newLeads, ...crmLeads])}
             />
 
+            {/* Bulk Unassigned Leads Assignment Tool */}
+            <div className="bg-amber-50/80 border border-amber-200 rounded-[2.5rem] p-8 space-y-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-black text-amber-950 flex items-center gap-2">
+                    <UserCheck className="text-amber-600" size={24} />
+                    Assign Unassigned Leads ({crmLeads.filter(l => !l.assigned_to).length} Pending)
+                  </h2>
+                  <p className="text-xs text-amber-800 mt-1">Bulk-assign all pending unassigned leads to any active sales representative or equal round-robin.</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-5 rounded-2xl border border-amber-200">
+                <div className="flex-1 w-full">
+                  <label className="font-bold text-gray-700 text-xs block mb-1">Target Representative / Strategy:</label>
+                  <select
+                    value={bulkAssignTarget}
+                    onChange={(e) => setBulkAssignTarget(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-slate-900 font-bold"
+                  >
+                    <option value="round_robin">Equal Round-Robin Auto-Distribute across all reps</option>
+                    {salesReps.map((r, i) => (
+                      <option key={i} value={r.email}>Assign all unassigned to: {r.full_name || r.email} ({r.email})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  onClick={handleBulkAssignUnassigned}
+                  disabled={crmLeads.filter(l => !l.assigned_to).length === 0}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-black px-6 py-3.5 rounded-xl shadow-md transition-all text-xs uppercase tracking-wider disabled:opacity-50 flex items-center gap-2 self-end w-full sm:w-auto justify-center"
+                >
+                  <UserCheck size={16} /> Assign {crmLeads.filter(l => !l.assigned_to).length} Unassigned Leads
+                </button>
+              </div>
+            </div>
+
             {/* Visual Sales Pipeline Kanban Board */}
             <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm space-y-6">
               <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
@@ -726,6 +850,114 @@ export default function AdminDashboard() {
                           </td>
                         </tr>
                       ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: SALES TEAM & REPS MANAGEMENT */}
+        {adminTab === 'sales_team' && (
+          <div className="space-y-8">
+            <header className="mb-6">
+              <h1 className="text-3xl font-black text-slate-900 mb-1">Sales Team & Representatives</h1>
+              <p className="text-gray-500 font-medium text-xs">Create new Sales Representative login credentials, manage active reps, and monitor assigned lead workloads.</p>
+            </header>
+
+            {/* Add New Sales Representative Card */}
+            <div className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm space-y-6">
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <UserCheck className="text-emerald-600" size={22} />
+                Add New Sales Representative Account
+              </h2>
+
+              {salesRepMsg && (
+                <div className={`p-4 rounded-2xl flex items-center gap-3 text-xs font-bold ${
+                  salesRepMsg.includes('successfully') ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
+                }`}>
+                  <div>{salesRepMsg}</div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Full Name</label>
+                  <input
+                    type="text"
+                    value={newSalesRep.name}
+                    onChange={(e) => setNewSalesRep({ ...newSalesRep, name: e.target.value })}
+                    placeholder="e.g. Faiz Ali"
+                    className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Email Address</label>
+                  <input
+                    type="email"
+                    value={newSalesRep.email}
+                    onChange={(e) => setNewSalesRep({ ...newSalesRep, email: e.target.value })}
+                    placeholder="e.g. faiz.ali@parhlopakistan.com.pk"
+                    className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Password</label>
+                  <input
+                    type="password"
+                    value={newSalesRep.password}
+                    onChange={(e) => setNewSalesRep({ ...newSalesRep, password: e.target.value })}
+                    placeholder="Enter login password"
+                    className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={handleAddSalesRep}
+                className="bg-[#064e3b] hover:bg-green-700 text-white px-8 py-3.5 rounded-xl font-black text-xs uppercase tracking-wider shadow-md transition-all flex items-center gap-2"
+              >
+                <Plus size={16} /> Create Sales Representative Account
+              </button>
+            </div>
+
+            {/* Active Sales Representatives List */}
+            <div className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm space-y-6">
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <Users className="text-emerald-600" size={22} />
+                Active Sales Representatives ({salesReps.length})
+              </h2>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-50 text-gray-700 font-bold border-b border-gray-200">
+                    <tr>
+                      <th className="p-4">Sales Representative</th>
+                      <th className="p-4">Email Address</th>
+                      <th className="p-4">Assigned Leads</th>
+                      <th className="p-4 text-right">Role Badge</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-slate-900 font-medium">
+                    {salesReps.map((rep, idx) => {
+                      const repLeadsCount = crmLeads.filter(l => l.assigned_to?.toLowerCase() === rep.email.toLowerCase()).length;
+                      return (
+                        <tr key={idx} className="hover:bg-gray-50">
+                          <td className="p-4 font-bold text-slate-900 text-sm">
+                            {rep.full_name || rep.email.split('@')[0]}
+                          </td>
+                          <td className="p-4 font-mono text-emerald-700">{rep.email}</td>
+                          <td className="p-4 font-bold font-mono text-slate-900">{repLeadsCount} Leads</td>
+                          <td className="p-4 text-right">
+                            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-full font-bold uppercase text-[10px]">
+                              Sales Representative
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

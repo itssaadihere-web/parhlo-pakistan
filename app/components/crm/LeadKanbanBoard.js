@@ -111,17 +111,29 @@ export default function LeadKanbanBoard({
           </button>
 
           {/* Assigned Sales Rep Filter */}
-          <select
-            value={selectedRepFilter}
-            onChange={(e) => setSelectedRepFilter(e.target.value)}
-            className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 font-medium"
-          >
-            <option value="all">All Sales Reps</option>
-            <option value="my_leads">My Assigned Leads Only</option>
-            {salesReps.map((r, i) => (
-              <option key={i} value={r.email}>{r.full_name || r.email}</option>
-            ))}
-          </select>
+          {currentUser?.role === 'sales' ? (
+            <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl px-3 py-2 text-xs font-bold flex items-center gap-1.5">
+              <User size={14} className="text-emerald-600" />
+              My Assigned Leads ({filteredLeads.length})
+            </div>
+          ) : (
+            <select
+              value={selectedRepFilter}
+              onChange={(e) => setSelectedRepFilter(e.target.value)}
+              className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 font-medium"
+            >
+              <option value="all">All System Leads</option>
+              <option value="unassigned">Unassigned Leads Pool</option>
+              {salesReps.map((r, i) => {
+                const repName = r.full_name ? r.full_name.split(' ')[0] : r.email.split('@')[0];
+                return (
+                  <option key={i} value={r.email}>
+                    {repName}'s Leads ({r.email})
+                  </option>
+                );
+              })}
+            </select>
+          )}
 
           {/* View Mode Switcher */}
           <div className="flex items-center bg-gray-100 p-1 rounded-xl border border-gray-200">
