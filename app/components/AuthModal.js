@@ -54,7 +54,14 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
       if (error) {
         const lower = (email || '').toLowerCase().trim();
         const salesEmails = ['faiz.ali@parhlopakistan.com.pk', 'nabiha.irfan@parhlopakistan.com.pk'];
-        const teacherEmails = ['farazsohail18@gmail.com', 'vaniya.ahmed.18@gmail.com', 'khadijaaqeelahmed20@gmail.com', 'muhammadzubair6879@gmail.com'];
+        const teacherEmails = [
+          'farazsohail18@gmail.com',
+          'vaniya.ahmed.18@gmail.com',
+          'khadijaaqeelahmed20@gmail.com',
+          'muhammadzubair6879@gmail.com',
+          'syedshafaathussain@gmail.com',
+          'abdulrehman@parhlopakistan.com.pk'
+        ];
 
         // Fallback for admin, sales, and teachers if Supabase Auth rate limits or requires confirmation
         if (lower === "parhlo.pakistan.edu@gmail.com") {

@@ -158,7 +158,9 @@ export default function AdminDashboard() {
       { email: 'farazsohail18@gmail.com', full_name: 'Dr. M Faraz Sohail', role: 'teacher', intro: 'Dr. M. Faraz Sohail — Biology Instructor (Class 9 Sindh Board)' },
       { email: 'vaniya.ahmed.18@gmail.com', full_name: 'Dr. Vaniya Ahmed', role: 'teacher', intro: 'Dr. Vaniya Ahmed — Chemistry Instructor (Class 9 Sindh Board)' },
       { email: 'khadijaaqeelahmed20@gmail.com', full_name: 'Dr. Khadija Aqeel Ahmed', role: 'teacher', intro: 'Dr. Khadija Aqeel — Physics Instructor (Class 9 Sindh Board)' },
-      { email: 'muhammadzubair6879@gmail.com', full_name: 'M. Zubair Yousif', role: 'teacher', intro: 'Muhammad Zubair — English Instructor (Class 9 Sindh Board)' }
+      { email: 'muhammadzubair6879@gmail.com', full_name: 'M. Zubair Yousif', role: 'teacher', intro: 'Muhammad Zubair — English Instructor (Class 9 Sindh Board)' },
+      { email: 'syedshafaathussain@gmail.com', full_name: 'Syed Shafaat Hussain', role: 'teacher', intro: 'Syed Shafaat Hussain — Mathematics Instructor (Class 9 Sindh Board)' },
+      { email: 'abdulrehman@parhlopakistan.com.pk', full_name: 'Abdul Rehman', role: 'teacher', intro: 'Abdul Rehman — Computer Science Instructor (Class 9 Sindh Board)' }
     ];
 
     let mergedTeachers = teachersData || [];
@@ -192,8 +194,11 @@ export default function AdminDashboard() {
     let fetchedLeads = [];
     try {
       const { data: dbLeads, error: leadsErr } = await supabase.from('leads').select('*').order('created_at', { ascending: false });
-      if (!leadsErr && dbLeads) {
-        fetchedLeads = dbLeads;
+      if (!leadsErr) {
+        fetchedLeads = dbLeads || [];
+        if (fetchedLeads.length === 0) {
+          window.localStorage.removeItem('parhlo_leads');
+        }
       } else {
         fetchedLeads = JSON.parse(window.localStorage.getItem('parhlo_leads') || '[]');
       }
@@ -240,6 +245,20 @@ export default function AdminDashboard() {
     const updated = crmLeads.filter(l => l.id !== leadId);
     setCrmLeads(updated);
     window.localStorage.setItem('parhlo_leads', JSON.stringify(updated));
+  };
+
+  const handleClearAllLeads = async () => {
+    if (!confirm("Are you sure you want to PURGE ALL LEADS and all activity logs? This action will permanently remove all leads for fresh imports!")) return;
+
+    try {
+      await supabase.from('lead_activities').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('leads').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    } catch (e) {}
+
+    setCrmLeads([]);
+    setAllActivities([]);
+    window.localStorage.removeItem('parhlo_leads');
+    alert("All system leads and activity logs have been successfully purged!");
   };
 
   const handleBulkAssignUnassigned = async () => {
@@ -661,6 +680,12 @@ export default function AdminDashboard() {
                 <h1 className="text-3xl font-black text-slate-900">CRM Kanban Board & Lead Management</h1>
                 <p className="text-gray-500 mt-1 text-sm">Upload Excel student lead sheets, manage visual pipeline stages, and reassign leads across sales representatives.</p>
               </div>
+              <button
+                onClick={handleClearAllLeads}
+                className="bg-rose-600 hover:bg-rose-700 text-white px-5 py-3 rounded-2xl font-black text-xs shadow-md flex items-center gap-2 self-start uppercase tracking-wider"
+              >
+                <Trash2 size={16} /> Purge All System Leads
+              </button>
             </div>
 
             {/* Excel Sheet Importer Component */}
