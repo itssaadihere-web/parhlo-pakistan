@@ -414,62 +414,20 @@ export default function SalesDashboard() {
               </div>
             </div>
 
-            {/* Quick Action Cards & Recent Offers */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              
-              {/* Quick Actions */}
-              <div className="lg:col-span-4 bg-white border border-gray-100 rounded-[2.5rem] p-8 space-y-6 shadow-sm">
+            {/* Recent Offers Full Width */}
+            <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 space-y-6 shadow-sm">
+              <div className="flex justify-between items-center border-b border-gray-100 pb-4">
                 <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-                  <Sparkles className="text-emerald-600" size={22} />
-                  Quick Actions
+                  <Clock className="text-emerald-600" size={22} />
+                  Recently Issued Offers
                 </h2>
-                <div className="space-y-4">
-                  <button
-                    onClick={() => setActiveTab('create')}
-                    className="w-full bg-[#064e3b] text-white p-5 rounded-2xl font-bold flex items-center justify-between shadow-md hover:bg-green-700 transition-all text-sm"
-                  >
-                    <span className="flex items-center gap-3">
-                      <PlusCircle size={20} /> Create Student Offer
-                    </span>
-                    <span>→</span>
-                  </button>
-
-                  <button
-                    onClick={() => setActiveTab('offers')}
-                    className="w-full bg-gray-50 border border-gray-200 text-gray-800 p-5 rounded-2xl font-bold flex items-center justify-between hover:bg-gray-100 transition-all text-sm"
-                  >
-                    <span className="flex items-center gap-3">
-                      <Tag size={20} className="text-emerald-600" /> View All Active Offers
-                    </span>
-                    <span>→</span>
-                  </button>
-
-                  <button
-                    onClick={() => setActiveTab('settings')}
-                    className="w-full bg-gray-50 border border-gray-200 text-gray-800 p-5 rounded-2xl font-bold flex items-center justify-between hover:bg-gray-100 transition-all text-sm"
-                  >
-                    <span className="flex items-center gap-3">
-                      <Settings size={20} className="text-gray-500" /> Portal Settings
-                    </span>
-                    <span>→</span>
-                  </button>
-                </div>
+                <button 
+                  onClick={() => setActiveTab('offers')}
+                  className="text-xs font-bold text-emerald-700 hover:underline"
+                >
+                  View All ({offers.length})
+                </button>
               </div>
-
-              {/* Recent Activity Table */}
-              <div className="lg:col-span-8 bg-white border border-gray-100 rounded-[2.5rem] p-8 space-y-6 shadow-sm">
-                <div className="flex justify-between items-center border-b border-gray-100 pb-4">
-                  <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-                    <Clock className="text-emerald-600" size={22} />
-                    Recently Issued Offers
-                  </h2>
-                  <button 
-                    onClick={() => setActiveTab('offers')}
-                    className="text-xs font-bold text-emerald-700 hover:underline"
-                  >
-                    View All ({offers.length})
-                  </button>
-                </div>
 
                 {offers.length === 0 ? (
                   <div className="text-center py-12 text-gray-400">
@@ -497,8 +455,6 @@ export default function SalesDashboard() {
                   </div>
                 )}
               </div>
-
-            </div>
           </>
         )}
 
