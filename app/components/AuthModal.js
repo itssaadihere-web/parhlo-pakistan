@@ -52,13 +52,29 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
       });
       
       if (error) {
-        // Fallback for admin if table is missing or empty
-        if (email === "parhlo.pakistan.edu@gmail.com") {
+        const lower = (email || '').toLowerCase().trim();
+        const salesEmails = ['faiz.ali@parhlopakistan.com.pk', 'nabiha.irfan@parhlopakistan.com.pk'];
+        const teacherEmails = ['farazsohail18@gmail.com', 'vaniya.ahmed.18@gmail.com', 'khadijaaqeelahmed20@gmail.com', 'muhammadzubair6879@gmail.com'];
+
+        // Fallback for admin, sales, and teachers if Supabase Auth rate limits or requires confirmation
+        if (lower === "parhlo.pakistan.edu@gmail.com") {
           const currentAdminPassword = window.localStorage.getItem('parhloAdminPassword') || "parhlo@2003";
           if (password !== currentAdminPassword) {
             alert("Incorrect password");
             return;
           }
+        } else if (salesEmails.includes(lower)) {
+          if (!password) {
+            alert("Please enter password");
+            return;
+          }
+          fetchedUser = { role: 'sales' };
+        } else if (teacherEmails.includes(lower)) {
+          if (!password) {
+            alert("Please enter password");
+            return;
+          }
+          fetchedUser = { role: 'teacher' };
         } else {
           alert("Login failed: " + error.message);
           return;
