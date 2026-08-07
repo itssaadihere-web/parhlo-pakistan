@@ -38,7 +38,7 @@ export default function LeadKanbanBoard({
   onOpenImporter
 }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedRepFilter, setSelectedRepFilter] = useState('all'); // 'all' | 'my_leads' | specific email
+  const [selectedRepFilter, setSelectedRepFilter] = useState(currentUser?.role === 'sales' ? 'my_leads' : 'all'); // 'all' | 'my_leads' | specific email
   const [viewMode, setViewMode] = useState('kanban'); // 'kanban' | 'list'
   const [filterDueToday, setFilterDueToday] = useState(false);
 

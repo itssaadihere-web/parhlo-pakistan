@@ -21,18 +21,23 @@ import {
   Menu,
   BarChart,
   Tag,
-  Gift,
   FileSpreadsheet,
   Trash2,
   Search,
   PhoneCall,
-  UserCheck
+  UserCheck,
+  TrendingUp,
+  Phone,
+  MessageSquare,
+  History
 } from 'lucide-react';
 
 import { supabase } from '@/utils/supabase';
 import InactivityTracker from '@/app/components/InactivityTracker';
 import { formatCurrency, parsePrice } from '@/utils/currencyHelpers';
 import LeadExcelImporter from '@/app/components/crm/LeadExcelImporter';
+import LeadKanbanBoard from '@/app/components/crm/LeadKanbanBoard';
+import LeadDetailModal from '@/app/components/crm/LeadDetailModal';
 
 
 export default function AdminDashboard() {
@@ -63,6 +68,8 @@ export default function AdminDashboard() {
   const [crmSearch, setCrmSearch] = useState('');
   const [crmRepFilter, setCrmRepFilter] = useState('all');
   const [salesReps, setSalesReps] = useState([]);
+  const [selectedLead, setSelectedLead] = useState(null);
+  const [allActivities, setAllActivities] = useState([]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -197,6 +204,16 @@ export default function AdminDashboard() {
       { email: 'nabiha.irfan@parhlopakistan.com.pk', full_name: 'Nabiha Irfan' }
     ];
     setSalesReps(repsData && repsData.length > 0 ? repsData : defaultReps);
+
+    // Fetch all Lead Activities for Sales Performance report
+    let fetchedActivities = [];
+    try {
+      const { data: dbAct, error: actErr } = await supabase.from('lead_activities').select('*').order('created_at', { ascending: false });
+      if (!actErr && dbAct) {
+        fetchedActivities = dbAct;
+      }
+    } catch (e) {}
+    setAllActivities(fetchedActivities);
 
     setLoading(false);
   };
@@ -401,8 +418,9 @@ export default function AdminDashboard() {
 
   const menuItems = [
     { name: 'Dashboard', icon: <Globe size={20} />, id: 'dashboard' },
-    { name: 'CRM & Leads', icon: <FileSpreadsheet size={20} />, id: 'crm' },
-    { name: 'Sales & Offers', icon: <Tag size={20} />, id: 'sales' },
+    { name: 'CRM Kanban & Leads', icon: <FileSpreadsheet size={20} />, id: 'crm' },
+    { name: 'Sales Performance', icon: <TrendingUp size={20} />, id: 'sales_performance' },
+    { name: 'Private Offers', icon: <Tag size={20} />, id: 'sales' },
     { name: 'Study Analytics', icon: <BarChart size={20} />, id: 'analytics' },
     { name: 'Teachers', icon: <User size={20} />, id: 'teachers' },
     { name: 'Students', icon: <Users size={20} />, id: 'students' },
@@ -553,15 +571,9 @@ export default function AdminDashboard() {
           <div className="space-y-8">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <div>
-                <h1 className="text-3xl font-black text-slate-900">CRM & Lead Management</h1>
-                <p className="text-gray-500 mt-1 text-sm">Upload Excel student lead sheets, assign leads to sales representatives, and track sales performance.</p>
+                <h1 className="text-3xl font-black text-slate-900">CRM Kanban Board & Lead Management</h1>
+                <p className="text-gray-500 mt-1 text-sm">Upload Excel student lead sheets, manage visual pipeline stages, and reassign leads across sales representatives.</p>
               </div>
-              <Link
-                href="/sales"
-                className="bg-[#064e3b] hover:bg-green-700 text-white px-6 py-3 rounded-2xl font-black text-xs shadow-md flex items-center gap-2 self-start uppercase tracking-wider"
-              >
-                <PhoneCall size={18} /> Open Sales CRM Portal
-              </Link>
             </div>
 
             {/* Excel Sheet Importer Component */}
@@ -570,11 +582,27 @@ export default function AdminDashboard() {
               onImportSuccess={(newLeads) => setCrmLeads([...newLeads, ...crmLeads])}
             />
 
+            {/* Visual Sales Pipeline Kanban Board */}
+            <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm space-y-6">
+              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                <FileSpreadsheet className="text-emerald-600" size={24} />
+                Visual Sales Pipeline (Kanban Board)
+              </h2>
+
+              <LeadKanbanBoard
+                leads={crmLeads}
+                currentUser={{ role: 'admin', isAdmin: true }}
+                salesReps={salesReps}
+                onSelectLead={(lead) => setSelectedLead(lead)}
+                onOpenImporter={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              />
+            </div>
+
             {/* Sales Rep Workload Distribution Cards */}
             <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm space-y-6">
               <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
                 <Users className="text-emerald-600" size={24} />
-                Sales Representative Workload & Lead Distribution
+                Sales Representative Workload & Distribution Summary
               </h2>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -609,12 +637,11 @@ export default function AdminDashboard() {
             <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-                  <FileSpreadsheet className="text-emerald-600" size={24} />
-                  All System Leads ({crmLeads.length})
+                  <Users className="text-emerald-600" size={24} />
+                  Re-assign & Manage Leads ({crmLeads.length})
                 </h2>
 
                 <div className="flex flex-wrap items-center gap-3">
-                  {/* Search */}
                   <div className="relative w-full sm:w-64">
                     <Search className="absolute left-3.5 top-3 text-gray-400" size={16} />
                     <input
@@ -626,7 +653,6 @@ export default function AdminDashboard() {
                     />
                   </div>
 
-                  {/* Filter by Rep */}
                   <select
                     value={crmRepFilter}
                     onChange={(e) => setCrmRepFilter(e.target.value)}
@@ -667,9 +693,9 @@ export default function AdminDashboard() {
                         return true;
                       })
                       .map((lead, idx) => (
-                        <tr key={lead.id || idx} className="hover:bg-gray-50">
+                        <tr key={lead.id || idx} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedLead(lead)}>
                           <td className="p-3 font-mono text-gray-400">{idx + 1}</td>
-                          <td className="p-3 font-bold">{lead.name}</td>
+                          <td className="p-3 font-bold text-slate-900">{lead.name}</td>
                           <td className="p-3 font-mono text-emerald-700">{lead.phone}</td>
                           <td className="p-3 font-mono text-gray-500">{lead.email || '—'}</td>
                           <td className="p-3 capitalize">
@@ -677,7 +703,7 @@ export default function AdminDashboard() {
                               {lead.status || 'new'}
                             </span>
                           </td>
-                          <td className="p-3">
+                          <td className="p-3" onClick={(e) => e.stopPropagation()}>
                             <select
                               value={lead.assigned_to || ''}
                               onChange={(e) => handleReassignLead(lead.id, e.target.value)}
@@ -689,7 +715,7 @@ export default function AdminDashboard() {
                               ))}
                             </select>
                           </td>
-                          <td className="p-3 text-right">
+                          <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={() => handleDeleteLead(lead.id)}
                               className="text-gray-400 hover:text-rose-600 p-1 transition-colors"
@@ -703,6 +729,138 @@ export default function AdminDashboard() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: SALES PERFORMANCE REPORT */}
+        {adminTab === 'sales_performance' && (
+          <div className="space-y-8">
+            <header className="mb-6">
+              <h1 className="text-3xl font-black text-slate-900 mb-1">Sales Team Performance & Activity Audit</h1>
+              <p className="text-gray-500 font-medium text-xs">Monitor lead conversion rates, calls logged, WhatsApp messages, and activity audit trails per sales representative.</p>
+            </header>
+
+            {/* Performance Overview KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
+              <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center gap-4">
+                <div className="p-4 rounded-2xl bg-blue-50 text-blue-600"><Users size={24} /></div>
+                <div>
+                  <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Total System Leads</p>
+                  <p className="text-2xl font-black text-slate-900">{crmLeads.length}</p>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center gap-4">
+                <div className="p-4 rounded-2xl bg-emerald-50 text-emerald-600"><Phone size={24} /></div>
+                <div>
+                  <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Total Activities Logged</p>
+                  <p className="text-2xl font-black text-slate-900">{allActivities.length}</p>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center gap-4">
+                <div className="p-4 rounded-2xl bg-purple-50 text-purple-600"><CheckCircle2 size={24} /></div>
+                <div>
+                  <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Converted Students</p>
+                  <p className="text-2xl font-black text-slate-900">
+                    {crmLeads.filter(l => l.status === 'converted').length}
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center gap-4">
+                <div className="p-4 rounded-2xl bg-amber-50 text-amber-600"><TrendingUp size={24} /></div>
+                <div>
+                  <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Overall Conversion Rate</p>
+                  <p className="text-2xl font-black text-slate-900">
+                    {crmLeads.length > 0 ? ((crmLeads.filter(l => l.status === 'converted').length / crmLeads.length) * 100).toFixed(1) : '0'}%
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Sales Rep Detailed Performance Matrix Table */}
+            <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm space-y-6">
+              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                <TrendingUp className="text-emerald-600" size={24} />
+                Sales Representative Performance Breakdown
+              </h2>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-50 text-gray-700 font-bold border-b border-gray-200">
+                    <tr>
+                      <th className="p-4">Sales Representative</th>
+                      <th className="p-4">Assigned Leads</th>
+                      <th className="p-4">Contacted</th>
+                      <th className="p-4">Interested</th>
+                      <th className="p-4">Demo / Trial</th>
+                      <th className="p-4">Converted</th>
+                      <th className="p-4">Calls / WhatsApp Logged</th>
+                      <th className="p-4 text-right">Conversion Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-slate-900 font-medium">
+                    {salesReps.map((rep, idx) => {
+                      const repLeads = crmLeads.filter(l => l.assigned_to?.toLowerCase() === rep.email.toLowerCase());
+                      const contactedCount = repLeads.filter(l => l.status === 'contacted').length;
+                      const interestedCount = repLeads.filter(l => l.status === 'interested').length;
+                      const demoCount = repLeads.filter(l => l.status === 'demo_scheduled').length;
+                      const convertedCount = repLeads.filter(l => l.status === 'converted').length;
+                      const repActs = allActivities.filter(a => a.sales_email?.toLowerCase() === rep.email.toLowerCase());
+                      const rate = repLeads.length > 0 ? ((convertedCount / repLeads.length) * 100).toFixed(1) : '0.0';
+
+                      return (
+                        <tr key={idx} className="hover:bg-gray-50">
+                          <td className="p-4 font-bold">
+                            <span className="block text-slate-900 text-sm">{rep.full_name || rep.email.split('@')[0]}</span>
+                            <span className="text-[11px] text-gray-400 font-mono">{rep.email}</span>
+                          </td>
+                          <td className="p-4 font-bold font-mono text-slate-900">{repLeads.length}</td>
+                          <td className="p-4 text-amber-700 font-bold">{contactedCount}</td>
+                          <td className="p-4 text-indigo-700 font-bold">{interestedCount}</td>
+                          <td className="p-4 text-purple-700 font-bold">{demoCount}</td>
+                          <td className="p-4 text-emerald-700 font-bold">{convertedCount}</td>
+                          <td className="p-4 font-mono text-gray-600">{repActs.length} Activities</td>
+                          <td className="p-4 text-right font-mono font-bold text-emerald-700 text-sm">{rate}%</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Live Activity Audit Trail Stream */}
+            <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm space-y-6">
+              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                <History className="text-emerald-600" size={24} />
+                Live Sales Activity Stream & Audit Trail ({allActivities.length})
+              </h2>
+
+              {allActivities.length === 0 ? (
+                <p className="text-xs text-gray-400 italic py-6">No call logs or sales activities recorded yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {allActivities.slice(0, 10).map((act) => (
+                    <div key={act.id} className="p-4 bg-gray-50 border border-gray-200/80 rounded-2xl flex items-center justify-between text-xs">
+                      <div>
+                        <div className="font-bold text-slate-900 flex items-center gap-2">
+                          <span className="capitalize text-emerald-700 font-mono font-bold">{act.activity_type}</span>
+                          {act.call_status && <span className="text-gray-400">({act.call_status})</span>}
+                          <span className="text-gray-400 font-normal">by</span>
+                          <span className="text-slate-800">{act.sales_email}</span>
+                        </div>
+                        <p className="text-gray-600 font-medium mt-1">{act.notes}</p>
+                      </div>
+                      <div className="text-right font-mono text-[10px] text-gray-400">
+                        {new Date(act.created_at).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1505,6 +1663,23 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Lead Detail Modal for Admin */}
+      {selectedLead && (
+        <LeadDetailModal
+          lead={selectedLead}
+          currentUser={{ email: 'admin@parhlopakistan.com.pk', role: 'admin', isAdmin: true }}
+          salesReps={salesReps}
+          onClose={() => setSelectedLead(null)}
+          onUpdateLead={(updatedLead) => {
+            const updated = crmLeads.map(l => l.id === updatedLead.id ? updatedLead : l);
+            setCrmLeads(updated);
+          }}
+          onConvertToOffer={(lead) => {
+            setAdminTab('sales');
+          }}
+        />
       )}
     </div>
   );

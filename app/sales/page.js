@@ -87,13 +87,19 @@ export default function SalesDashboard() {
       const isAdmin = window.localStorage.getItem('parhloAdmin') === 'true' || role === 'admin';
       const isSales = SALES_EMAILS.includes(email) || role === 'sales';
 
-      if (!isAdmin && !isSales) {
-        alert("Access Denied: Sales Portal is restricted to authorized Sales personnel and Admin.");
+      if (isAdmin) {
+        alert("Admin Access Notice: Admins manage Sales, CRM, and Performance Reports directly within the Admin Panel (/admin). Redirecting to Admin Panel...");
+        router.replace('/admin');
+        return;
+      }
+
+      if (!isSales) {
+        alert("Access Denied: Sales Representative Portal is restricted exclusively to authorized Sales Representatives.");
         router.replace('/');
         return;
       }
 
-      setCurrentUser({ email, role: isAdmin ? 'admin' : 'sales', isSales, isAdmin });
+      setCurrentUser({ email, role: 'sales', isSales: true, isAdmin: false });
       fetchData();
     }
   }, []);
