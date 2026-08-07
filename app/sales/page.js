@@ -27,11 +27,16 @@ import {
   Shield,
   Menu,
   X,
-  TrendingUp
+  TrendingUp,
+  PhoneCall,
+  GraduationCap,
+  FileSpreadsheet
 } from 'lucide-react';
 import { supabase } from '@/utils/supabase';
 import InactivityTracker from '@/app/components/InactivityTracker';
 import { formatCurrency, parsePrice } from '@/utils/currencyHelpers';
+import LeadKanbanBoard from '@/app/components/crm/LeadKanbanBoard';
+import LeadDetailModal from '@/app/components/crm/LeadDetailModal';
 
 const SALES_EMAILS = [
   'faiz.ali@parhlopakistan.com.pk',
@@ -42,13 +47,24 @@ export default function SalesDashboard() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState({ email: '', role: '', isSales: false, isAdmin: false });
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'create' | 'offers' | 'settings'
+  const [activeTab, setActiveTab] = useState('leads'); // default to CRM 'leads'
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Form State
+  // CRM Data States
+  const [leads, setLeads] = useState([]);
+  const [salesReps, setSalesReps] = useState([]);
+  const [selectedLead, setSelectedLead] = useState(null);
+
+  // Student & Enrollment Data States
+  const [students, setStudents] = useState([]);
+  const [purchases, setPurchases] = useState([]);
+  const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  const [enrollmentSearchTerm, setEnrollmentSearchTerm] = useState('');
+
+  // Form State for Generate Offer
   const [studentEmail, setStudentEmail] = useState('');
   const [selectedCourseSlug, setSelectedCourseSlug] = useState('');
-  const [offerType, setOfferType] = useState('added_discount'); // 'added_discount' | 'free_month_trial' | 'discounted_installment'
+  const [offerType, setOfferType] = useState('added_discount');
   const [discountPercent, setDiscountPercent] = useState('5');
   const [customInstallment, setCustomInstallment] = useState('');
   const [formMessage, setFormMessage] = useState({ type: '', text: '' });
@@ -78,14 +94,14 @@ export default function SalesDashboard() {
       }
 
       setCurrentUser({ email, role: isAdmin ? 'admin' : 'sales', isSales, isAdmin });
-      fetchCoursesAndOffers();
+      fetchData();
     }
   }, []);
 
-  const fetchCoursesAndOffers = async () => {
+  const fetchData = async () => {
     setLoading(true);
 
-    // Fetch courses
+    // 1. Fetch courses
     const { data: coursesData } = await supabase.from('courses').select('*').order('name');
     setCourses(coursesData || []);
 
@@ -93,7 +109,7 @@ export default function SalesDashboard() {
       setSelectedCourseSlug(coursesData[0].slug);
     }
 
-    // Fetch sales offers from Supabase (with fallback to localStorage)
+    // 2. Fetch sales offers
     let fetchedOffers = [];
     try {
       const { data: dbOffers, error } = await supabase.from('sales_offers').select('*').order('created_at', { ascending: false });
@@ -107,8 +123,40 @@ export default function SalesDashboard() {
       const local = window.localStorage.getItem('parhlo_sales_offers');
       if (local) fetchedOffers = JSON.parse(local);
     }
-
     setOffers(fetchedOffers);
+
+    // 3. Fetch Leads for CRM
+    let fetchedLeads = [];
+    try {
+      const { data: dbLeads, error: leadsErr } = await supabase.from('leads').select('*').order('created_at', { ascending: false });
+      if (!leadsErr && dbLeads) {
+        fetchedLeads = dbLeads;
+      } else {
+        const localLeads = JSON.parse(window.localStorage.getItem('parhlo_leads') || '[]');
+        fetchedLeads = localLeads;
+      }
+    } catch (e) {
+      const localLeads = JSON.parse(window.localStorage.getItem('parhlo_leads') || '[]');
+      fetchedLeads = localLeads;
+    }
+    setLeads(fetchedLeads);
+
+    // 4. Fetch Sales Reps
+    const { data: repsData } = await supabase.from('users').select('*').eq('role', 'sales');
+    const defaultReps = [
+      { email: 'faiz.ali@parhlopakistan.com.pk', full_name: 'Faiz Ali' },
+      { email: 'nabiha.irfan@parhlopakistan.com.pk', full_name: 'Nabiha Irfan' }
+    ];
+    setSalesReps(repsData && repsData.length > 0 ? repsData : defaultReps);
+
+    // 5. Fetch Enrollments (Purchases)
+    const { data: purchasesData } = await supabase.from('purchases').select('*').order('created_at', { ascending: false });
+    setPurchases(purchasesData || []);
+
+    // 6. Fetch Students
+    const { data: studentsData } = await supabase.from('users').select('*').eq('role', 'student').order('created_at', { ascending: false });
+    setStudents(studentsData || []);
+
     setLoading(false);
   };
 
@@ -147,7 +195,6 @@ export default function SalesDashboard() {
       return;
     }
 
-    // Validate discount cap for Sales Team
     const extraDisc = parseFloat(discountPercent) || 0;
     if (!currentUser.isAdmin && offerType === 'added_discount' && extraDisc > 5) {
       setFormMessage({ type: 'error', text: 'Sales Team limit exceeded: You can offer up to a maximum of 5% additional discount.' });
@@ -167,14 +214,12 @@ export default function SalesDashboard() {
       created_at: new Date().toISOString()
     };
 
-    // Try DB insertion
     try {
       await supabase.from('sales_offers').insert([newOffer]);
     } catch (err) {
       console.warn("DB insert fallback to local storage:", err);
     }
 
-    // Always update local storage sync as well
     const updatedLocal = [newOffer, ...offers];
     setOffers(updatedLocal);
     window.localStorage.setItem('parhlo_sales_offers', JSON.stringify(updatedLocal));
@@ -199,6 +244,18 @@ export default function SalesDashboard() {
     const updated = offers.filter(o => o.id !== offerId);
     setOffers(updated);
     window.localStorage.setItem('parhlo_sales_offers', JSON.stringify(updated));
+  };
+
+  const handleConvertToOffer = (lead) => {
+    if (lead.email) {
+      setStudentEmail(lead.email);
+    }
+    setActiveTab('create');
+  };
+
+  const handleUpdateLeadFromModal = (updatedLead) => {
+    const updatedList = leads.map(l => l.id === updatedLead.id ? updatedLead : l);
+    setLeads(updatedList);
   };
 
   const handleChangePassword = async (e) => {
@@ -245,11 +302,22 @@ export default function SalesDashboard() {
     o.course_slug?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const activeOffersCount = offers.filter(o => o.status === 'active').length;
-  const redeemedOffersCount = offers.filter(o => o.status === 'redeemed').length;
+  const filteredStudents = students.filter(s =>
+    s.full_name?.toLowerCase().includes(studentSearchTerm.toLowerCase()) ||
+    s.email?.toLowerCase().includes(studentSearchTerm.toLowerCase()) ||
+    s.phone?.includes(studentSearchTerm)
+  );
+
+  const filteredPurchases = purchases.filter(p =>
+    p.student_email?.toLowerCase().includes(enrollmentSearchTerm.toLowerCase()) ||
+    p.course_slug?.toLowerCase().includes(enrollmentSearchTerm.toLowerCase())
+  );
 
   const menuItems = [
+    { name: 'Leads (CRM)', icon: <PhoneCall size={20} />, id: 'leads' },
     { name: 'Overview', icon: <BookOpen size={20} />, id: 'overview' },
+    { name: 'Enrollments', icon: <GraduationCap size={20} />, id: 'enrollments' },
+    { name: 'Student List', icon: <Users size={20} />, id: 'students' },
     { name: 'Generate Offer', icon: <PlusCircle size={20} />, id: 'create' },
     { name: 'Active Offers', icon: <Tag size={20} />, id: 'offers' },
     { name: 'Settings', icon: <Settings size={20} />, id: 'settings' }
@@ -267,8 +335,8 @@ export default function SalesDashboard() {
           <Link href="/" className="flex items-center gap-2">
             <img src="/logo.png" alt="Logo" className="h-10 cursor-pointer logo-outline" />
           </Link>
-          <span className="font-bold text-green-800 text-sm bg-green-50 px-2.5 py-1 rounded-lg border border-green-200">
-            Sales
+          <span className="font-bold text-green-800 text-xs bg-green-50 px-2.5 py-1 rounded-lg border border-green-200">
+            Sales CRM
           </span>
         </div>
         
@@ -282,12 +350,12 @@ export default function SalesDashboard() {
           </div>
         </div>
 
-        <nav className="flex-1 px-4 space-y-2 mt-2">
+        <nav className="flex-1 px-4 space-y-1 mt-2">
           {menuItems.map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition-all ${
                 activeTab === item.id 
                 ? 'bg-[#064e3b] text-white shadow-md' 
                 : 'text-gray-500 hover:bg-gray-50'
@@ -300,7 +368,7 @@ export default function SalesDashboard() {
 
         <button 
           onClick={handleLogout} 
-          className="m-6 flex items-center gap-3 px-4 py-3 text-gray-500 font-bold text-sm hover:text-red-600 transition-colors rounded-xl hover:bg-red-50"
+          className="m-6 flex items-center gap-3 px-4 py-3 text-gray-500 font-bold text-xs hover:text-red-600 transition-colors rounded-xl hover:bg-red-50"
         >
           <LogOut size={20} /> Sign Out
         </button>
@@ -314,7 +382,7 @@ export default function SalesDashboard() {
           <div className="flex items-center gap-3">
             <button onClick={() => setIsMobileMenuOpen(true)} className="text-gray-500 hover:text-gray-900"><Menu size={24}/></button>
             <img src="/logo.png" alt="Logo" className="h-10 logo-outline" />
-            <span className="font-bold text-green-800 text-xs bg-green-50 px-2 py-0.5 rounded">Sales</span>
+            <span className="font-bold text-green-800 text-xs bg-green-50 px-2 py-0.5 rounded">Sales CRM</span>
           </div>
           <button onClick={handleLogout} className="text-gray-500 hover:text-red-600"><LogOut size={20}/></button>
         </div>
@@ -336,23 +404,13 @@ export default function SalesDashboard() {
                 </Link>
                 <span className="font-bold text-green-800 text-xs bg-green-50 px-2 py-0.5 rounded">Sales</span>
               </div>
-              
-              <div className="p-6 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-green-100 text-green-700 flex items-center justify-center font-black text-xl uppercase">
-                  {salesName.charAt(0)}
-                </div>
-                <div>
-                  <p className="font-bold text-sm text-gray-900">Welcome,</p>
-                  <p className="text-xs text-gray-500 font-medium truncate max-w-[120px]">{salesName}</p>
-                </div>
-              </div>
 
               <nav className="flex-1 px-4 space-y-2 mt-2">
                 {menuItems.map((item) => (
                   <button
                     key={item.id}
                     onClick={() => { setActiveTab(item.id); setIsMobileMenuOpen(false); }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition-all ${
                       activeTab === item.id 
                       ? 'bg-[#064e3b] text-white shadow-md' 
                       : 'text-gray-500 hover:bg-gray-50'
@@ -365,7 +423,7 @@ export default function SalesDashboard() {
 
               <button 
                 onClick={handleLogout} 
-                className="m-6 flex items-center gap-3 px-4 py-3 text-gray-500 font-bold text-sm hover:text-red-600 transition-colors rounded-xl hover:bg-red-50"
+                className="m-6 flex items-center gap-3 px-4 py-3 text-gray-500 font-bold text-xs hover:text-red-600 transition-colors rounded-xl hover:bg-red-50"
               >
                 <LogOut size={20} /> Sign Out
               </button>
@@ -373,13 +431,32 @@ export default function SalesDashboard() {
           </div>
         )}
 
-        {/* TAB 1: OVERVIEW */}
+        {/* TAB 1: LEADS (CRM) */}
+        {activeTab === 'leads' && (
+          <div className="space-y-6">
+            <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-black text-slate-900 mb-1">Sales Leads & Pipeline</h1>
+                <p className="text-gray-500 font-medium text-xs">Track student prospects, log calls, open WhatsApp chats, and update sales stage.</p>
+              </div>
+            </header>
+
+            <LeadKanbanBoard
+              leads={leads}
+              currentUser={currentUser}
+              salesReps={salesReps}
+              onSelectLead={(lead) => setSelectedLead(lead)}
+            />
+          </div>
+        )}
+
+        {/* TAB 2: OVERVIEW */}
         {activeTab === 'overview' && (
           <>
             <header className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h1 className="text-3xl font-black text-slate-900 mb-1">Sales Representative Portal</h1>
-                <p className="text-gray-500 font-medium text-sm">Issue private discount offers, 1-Month Free Access, and custom installment plans.</p>
+                <p className="text-gray-500 font-medium text-xs">Issue private discount offers, 1-Month Free Access, and custom installment plans.</p>
               </div>
               <div className="flex items-center gap-3">
                 <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-4 py-2 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-sm">
@@ -390,7 +467,14 @@ export default function SalesDashboard() {
             </header>
 
             {/* Stat Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-6 mb-10">
+              <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center gap-4">
+                <div className="p-4 rounded-2xl bg-indigo-50 text-indigo-600"><PhoneCall size={24} /></div>
+                <div>
+                  <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Total CRM Leads</p>
+                  <p className="text-2xl font-black text-gray-900">{leads.length}</p>
+                </div>
+              </div>
               <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center gap-4">
                 <div className="p-4 rounded-2xl bg-blue-50 text-blue-600"><Tag size={24} /></div>
                 <div>
@@ -401,15 +485,15 @@ export default function SalesDashboard() {
               <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center gap-4">
                 <div className="p-4 rounded-2xl bg-emerald-50 text-emerald-600"><CheckCircle2 size={24} /></div>
                 <div>
-                  <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Active Offers</p>
-                  <p className="text-2xl font-black text-gray-900">{activeOffersCount}</p>
+                  <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Total Enrollments</p>
+                  <p className="text-2xl font-black text-gray-900">{purchases.length}</p>
                 </div>
               </div>
               <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center gap-4">
-                <div className="p-4 rounded-2xl bg-purple-50 text-purple-600"><Gift size={24} /></div>
+                <div className="p-4 rounded-2xl bg-purple-50 text-purple-600"><Users size={24} /></div>
                 <div>
-                  <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Redeemed Offers</p>
-                  <p className="text-2xl font-black text-gray-900">{redeemedOffersCount}</p>
+                  <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Total Students</p>
+                  <p className="text-2xl font-black text-gray-900">{students.length}</p>
                 </div>
               </div>
             </div>
@@ -431,7 +515,7 @@ export default function SalesDashboard() {
 
                 {offers.length === 0 ? (
                   <div className="text-center py-12 text-gray-400">
-                    <p className="text-sm font-medium">No offers generated yet.</p>
+                    <p className="text-xs font-medium">No offers generated yet.</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -458,17 +542,125 @@ export default function SalesDashboard() {
           </>
         )}
 
-        {/* TAB 2: GENERATE OFFER */}
+        {/* TAB 3: ENROLLMENTS */}
+        {activeTab === 'enrollments' && (
+          <div className="space-y-6">
+            <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div>
+                <h1 className="text-3xl font-black text-slate-900 mb-1">Student Enrollments & Purchases</h1>
+                <p className="text-gray-500 font-medium text-xs">View all active student course enrollments and payment statuses.</p>
+              </div>
+
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3.5 top-3.5 text-gray-400" size={18} />
+                <input
+                  type="text"
+                  value={enrollmentSearchTerm}
+                  onChange={(e) => setEnrollmentSearchTerm(e.target.value)}
+                  placeholder="Search email or course..."
+                  className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-medium shadow-sm"
+                />
+              </div>
+            </header>
+
+            <div className="bg-white border border-gray-100 rounded-[2.5rem] p-6 shadow-sm overflow-x-auto">
+              {filteredPurchases.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-10">No course enrollments found.</p>
+              ) : (
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-50 text-gray-700 font-bold border-b border-gray-200">
+                    <tr>
+                      <th className="p-3">Student Email</th>
+                      <th className="p-3">Course Slug</th>
+                      <th className="p-3">Plan</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-slate-900 font-medium">
+                    {filteredPurchases.map((p) => (
+                      <tr key={p.id} className="hover:bg-gray-50">
+                        <td className="p-3 font-mono font-bold text-slate-900">{p.student_email}</td>
+                        <td className="p-3 text-emerald-700 font-bold">{p.course_slug}</td>
+                        <td className="p-3 capitalize">{p.payment_plan || 'Full'}</td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                            p.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {p.status}
+                          </span>
+                        </td>
+                        <td className="p-3 font-mono text-gray-500">{new Date(p.created_at).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: STUDENT LIST */}
+        {activeTab === 'students' && (
+          <div className="space-y-6">
+            <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div>
+                <h1 className="text-3xl font-black text-slate-900 mb-1">Registered Student List</h1>
+                <p className="text-gray-500 font-medium text-xs">View all registered students on Parhlo Pakistan platform.</p>
+              </div>
+
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3.5 top-3.5 text-gray-400" size={18} />
+                <input
+                  type="text"
+                  value={studentSearchTerm}
+                  onChange={(e) => setStudentSearchTerm(e.target.value)}
+                  placeholder="Search name, email, or phone..."
+                  className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-medium shadow-sm"
+                />
+              </div>
+            </header>
+
+            <div className="bg-white border border-gray-100 rounded-[2.5rem] p-6 shadow-sm overflow-x-auto">
+              {filteredStudents.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-10">No registered students found.</p>
+              ) : (
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-50 text-gray-700 font-bold border-b border-gray-200">
+                    <tr>
+                      <th className="p-3">Full Name</th>
+                      <th className="p-3">Email Address</th>
+                      <th className="p-3">Phone Number</th>
+                      <th className="p-3">Joined Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-slate-900 font-medium">
+                    {filteredStudents.map((st) => (
+                      <tr key={st.id || st.email} className="hover:bg-gray-50">
+                        <td className="p-3 font-bold">{st.full_name || '—'}</td>
+                        <td className="p-3 font-mono text-slate-900">{st.email}</td>
+                        <td className="p-3 font-mono text-emerald-700">{st.phone || '—'}</td>
+                        <td className="p-3 font-mono text-gray-500">{new Date(st.created_at || Date.now()).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: GENERATE OFFER */}
         {activeTab === 'create' && (
           <div className="max-w-4xl mx-auto space-y-8">
             <header className="mb-6">
               <h1 className="text-3xl font-black text-slate-900 mb-1">Generate Private Student Offer</h1>
-              <p className="text-gray-500 font-medium text-sm">Target a specific student email with custom discounts or 1-Month Free Access.</p>
+              <p className="text-gray-500 font-medium text-xs">Target a specific student email with custom discounts or 1-Month Free Access.</p>
             </header>
 
             <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 space-y-6 shadow-sm">
               {formMessage.text && (
-                <div className={`p-4 rounded-2xl flex items-start gap-3 text-sm font-medium ${
+                <div className={`p-4 rounded-2xl flex items-start gap-3 text-xs font-medium ${
                   formMessage.type === 'success' 
                     ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' 
                     : 'bg-rose-50 border border-rose-200 text-rose-800'
@@ -491,7 +683,7 @@ export default function SalesDashboard() {
                     value={studentEmail}
                     onChange={(e) => setStudentEmail(e.target.value)}
                     placeholder="e.g. student@gmail.com"
-                    className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-medium text-sm text-slate-900"
+                    className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-medium text-xs text-slate-900"
                   />
                 </div>
 
@@ -503,7 +695,7 @@ export default function SalesDashboard() {
                   <select
                     value={selectedCourseSlug}
                     onChange={(e) => setSelectedCourseSlug(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-medium text-sm text-slate-900"
+                    className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-medium text-xs text-slate-900"
                   >
                     {courses.map(c => (
                       <option key={c.id || c.slug} value={c.slug}>
@@ -587,7 +779,7 @@ export default function SalesDashboard() {
                       value={discountPercent}
                       onChange={(e) => setDiscountPercent(e.target.value)}
                       placeholder="Enter percentage (e.g. 5)"
-                      className="w-full bg-white border border-gray-200 rounded-xl p-3 text-slate-900 text-sm focus:outline-none focus:border-emerald-600 font-medium"
+                      className="w-full bg-white border border-gray-200 rounded-xl p-3 text-slate-900 text-xs focus:outline-none focus:border-emerald-600 font-medium"
                     />
                   </div>
                 )}
@@ -614,7 +806,7 @@ export default function SalesDashboard() {
                       value={customInstallment}
                       onChange={(e) => setCustomInstallment(e.target.value)}
                       placeholder={`Default: Rs. ${Math.round(basePrice / 3)}`}
-                      className="w-full bg-white border border-gray-200 rounded-xl p-3 text-slate-900 text-sm focus:outline-none focus:border-emerald-600 font-medium"
+                      className="w-full bg-white border border-gray-200 rounded-xl p-3 text-slate-900 text-xs focus:outline-none focus:border-emerald-600 font-medium"
                     />
                   </div>
                 )}
@@ -639,7 +831,7 @@ export default function SalesDashboard() {
                 {/* Submit Button */}
                 <button
                   type="submit"
-                  className="w-full bg-[#064e3b] hover:bg-green-700 text-white font-black py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-wider text-sm"
+                  className="w-full bg-[#064e3b] hover:bg-green-700 text-white font-black py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-wider text-xs"
                 >
                   <Send size={18} />
                   Generate & Issue Private Offer
@@ -650,13 +842,13 @@ export default function SalesDashboard() {
           </div>
         )}
 
-        {/* TAB 3: ACTIVE OFFERS */}
+        {/* TAB 6: ACTIVE OFFERS */}
         {activeTab === 'offers' && (
           <div className="space-y-6">
             <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <div>
                 <h1 className="text-3xl font-black text-slate-900 mb-1">Active Private Offers</h1>
-                <p className="text-gray-500 font-medium text-sm">Manage and review all custom student offers generated by the sales team.</p>
+                <p className="text-gray-500 font-medium text-xs">Manage and review all custom student offers generated by the sales team.</p>
               </div>
 
               {/* Search Bar */}
@@ -676,7 +868,7 @@ export default function SalesDashboard() {
               {filteredOffers.length === 0 ? (
                 <div className="text-center py-20 text-gray-400 space-y-3">
                   <Tag size={48} className="mx-auto text-gray-300" />
-                  <p className="text-sm font-bold text-gray-500">No private offers found matching your query.</p>
+                  <p className="text-xs font-bold text-gray-500">No private offers found matching your query.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -745,15 +937,14 @@ export default function SalesDashboard() {
           </div>
         )}
 
-        {/* TAB 4: SETTINGS */}
+        {/* TAB 7: SETTINGS */}
         {activeTab === 'settings' && (
           <div className="max-w-4xl mx-auto space-y-8">
             <header className="mb-6">
               <h1 className="text-3xl font-black text-slate-900 mb-1">Account & Security Settings</h1>
-              <p className="text-gray-500 font-medium text-sm">Manage your sales account security and credentials.</p>
+              <p className="text-gray-500 font-medium text-xs">Manage your sales account security and credentials.</p>
             </header>
 
-            {/* Profile Overview Card */}
             <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm space-y-6">
               <div className="flex items-center gap-4 pb-6 border-b border-gray-100">
                 <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black text-2xl uppercase">
@@ -782,7 +973,6 @@ export default function SalesDashboard() {
               </div>
             </div>
 
-            {/* Password Change Form */}
             <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm space-y-6">
               <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
                 <Key className="text-emerald-600" size={22} />
@@ -790,7 +980,7 @@ export default function SalesDashboard() {
               </h2>
 
               {settingsMsg.text && (
-                <div className={`p-4 rounded-2xl flex items-start gap-3 text-sm font-medium ${
+                <div className={`p-4 rounded-2xl flex items-start gap-3 text-xs font-medium ${
                   settingsMsg.type === 'success' 
                     ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' 
                     : 'bg-rose-50 border border-rose-200 text-rose-800'
@@ -800,40 +990,52 @@ export default function SalesDashboard() {
                 </div>
               )}
 
-              <form onSubmit={handleChangePassword} className="space-y-4 max-w-lg">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-700 uppercase">New Password</label>
+              <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">New Password</label>
                   <input
                     type="password"
                     required
                     value={newPass}
                     onChange={(e) => setNewPass(e.target.value)}
                     placeholder="Enter new password"
-                    className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-xl text-slate-900 text-sm font-medium outline-none focus:border-emerald-600"
+                    className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-emerald-600"
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-gray-700 uppercase">Confirm New Password</label>
+                <div>
+                  <label className="text-xs font-bold text-gray-700 block mb-1">Confirm New Password</label>
                   <input
                     type="password"
                     required
                     value={confirmPass}
                     onChange={(e) => setConfirmPass(e.target.value)}
                     placeholder="Confirm new password"
-                    className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-xl text-slate-900 text-sm font-medium outline-none focus:border-emerald-600"
+                    className="w-full bg-gray-50 border border-gray-200 p-3 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:border-emerald-600"
                   />
                 </div>
 
                 <button
                   type="submit"
-                  className="bg-[#064e3b] hover:bg-green-700 text-white font-bold px-6 py-3 rounded-xl shadow-md transition-all text-xs uppercase tracking-wider"
+                  className="bg-[#064e3b] hover:bg-green-700 text-white font-bold px-6 py-3 rounded-xl shadow-md transition-all text-xs"
                 >
                   Update Password
                 </button>
               </form>
             </div>
           </div>
+        )}
+
+        {/* Lead Detail Modal */}
+        {selectedLead && (
+          <LeadDetailModal
+            lead={selectedLead}
+            currentUser={currentUser}
+            salesReps={salesReps}
+            onClose={() => setSelectedLead(null)}
+            onUpdateLead={handleUpdateLeadFromModal}
+            onConvertToOffer={handleConvertToOffer}
+          />
         )}
 
       </main>

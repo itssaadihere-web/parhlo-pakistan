@@ -21,12 +21,19 @@ import {
   Menu,
   BarChart,
   Tag,
-  Gift
+  Gift,
+  FileSpreadsheet,
+  Trash2,
+  Search,
+  PhoneCall,
+  UserCheck
 } from 'lucide-react';
 
 import { supabase } from '@/utils/supabase';
 import InactivityTracker from '@/app/components/InactivityTracker';
 import { formatCurrency, parsePrice } from '@/utils/currencyHelpers';
+import LeadExcelImporter from '@/app/components/crm/LeadExcelImporter';
+
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -50,6 +57,12 @@ export default function AdminDashboard() {
   const [passwordMessage, setPasswordMessage] = useState('');
   
   const [adminPhone, setAdminPhone] = useState('');
+
+  // CRM State Variables
+  const [crmLeads, setCrmLeads] = useState([]);
+  const [crmSearch, setCrmSearch] = useState('');
+  const [crmRepFilter, setCrmRepFilter] = useState('all');
+  const [salesReps, setSalesReps] = useState([]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -163,7 +176,48 @@ export default function AdminDashboard() {
       setStudents(studentsData || []);
     }
 
+    // Fetch CRM Leads
+    let fetchedLeads = [];
+    try {
+      const { data: dbLeads, error: leadsErr } = await supabase.from('leads').select('*').order('created_at', { ascending: false });
+      if (!leadsErr && dbLeads) {
+        fetchedLeads = dbLeads;
+      } else {
+        fetchedLeads = JSON.parse(window.localStorage.getItem('parhlo_leads') || '[]');
+      }
+    } catch (e) {
+      fetchedLeads = JSON.parse(window.localStorage.getItem('parhlo_leads') || '[]');
+    }
+    setCrmLeads(fetchedLeads);
+
+    // Fetch Sales Reps
+    const { data: repsData } = await supabase.from('users').select('*').eq('role', 'sales');
+    const defaultReps = [
+      { email: 'faiz.ali@parhlopakistan.com.pk', full_name: 'Faiz Ali' },
+      { email: 'nabiha.irfan@parhlopakistan.com.pk', full_name: 'Nabiha Irfan' }
+    ];
+    setSalesReps(repsData && repsData.length > 0 ? repsData : defaultReps);
+
     setLoading(false);
+  };
+
+  const handleReassignLead = async (leadId, newRepEmail) => {
+    try {
+      await supabase.from('leads').update({ assigned_to: newRepEmail, updated_at: new Date().toISOString() }).eq('id', leadId);
+    } catch (e) {}
+    const updated = crmLeads.map(l => l.id === leadId ? { ...l, assigned_to: newRepEmail } : l);
+    setCrmLeads(updated);
+    window.localStorage.setItem('parhlo_leads', JSON.stringify(updated));
+  };
+
+  const handleDeleteLead = async (leadId) => {
+    if (!confirm("Are you sure you want to delete this lead?")) return;
+    try {
+      await supabase.from('leads').delete().eq('id', leadId);
+    } catch (e) {}
+    const updated = crmLeads.filter(l => l.id !== leadId);
+    setCrmLeads(updated);
+    window.localStorage.setItem('parhlo_leads', JSON.stringify(updated));
   };
 
   const handleLogout = async () => {
@@ -347,6 +401,7 @@ export default function AdminDashboard() {
 
   const menuItems = [
     { name: 'Dashboard', icon: <Globe size={20} />, id: 'dashboard' },
+    { name: 'CRM & Leads', icon: <FileSpreadsheet size={20} />, id: 'crm' },
     { name: 'Sales & Offers', icon: <Tag size={20} />, id: 'sales' },
     { name: 'Study Analytics', icon: <BarChart size={20} />, id: 'analytics' },
     { name: 'Teachers', icon: <User size={20} />, id: 'teachers' },
@@ -492,6 +547,164 @@ export default function AdminDashboard() {
               </div>
             </div>
           </>
+        )}
+
+        {adminTab === 'crm' && (
+          <div className="space-y-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div>
+                <h1 className="text-3xl font-black text-slate-900">CRM & Lead Management</h1>
+                <p className="text-gray-500 mt-1 text-sm">Upload Excel student lead sheets, assign leads to sales representatives, and track sales performance.</p>
+              </div>
+              <Link
+                href="/sales"
+                className="bg-[#064e3b] hover:bg-green-700 text-white px-6 py-3 rounded-2xl font-black text-xs shadow-md flex items-center gap-2 self-start uppercase tracking-wider"
+              >
+                <PhoneCall size={18} /> Open Sales CRM Portal
+              </Link>
+            </div>
+
+            {/* Excel Sheet Importer Component */}
+            <LeadExcelImporter
+              salesReps={salesReps}
+              onImportSuccess={(newLeads) => setCrmLeads([...newLeads, ...crmLeads])}
+            />
+
+            {/* Sales Rep Workload Distribution Cards */}
+            <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm space-y-6">
+              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                <Users className="text-emerald-600" size={24} />
+                Sales Representative Workload & Lead Distribution
+              </h2>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-emerald-50 border border-emerald-200 p-5 rounded-2xl">
+                  <div className="text-[10px] font-black uppercase text-emerald-800 tracking-wider mb-1">Total System Leads</div>
+                  <div className="text-3xl font-black text-emerald-950">{crmLeads.length}</div>
+                </div>
+
+                {salesReps.map((rep, idx) => {
+                  const repCount = crmLeads.filter(l => l.assigned_to?.toLowerCase() === rep.email.toLowerCase()).length;
+                  return (
+                    <div key={idx} className="bg-gray-50 border border-gray-200 p-5 rounded-2xl">
+                      <div className="text-[10px] font-black uppercase text-gray-500 tracking-wider mb-1">
+                        {rep.full_name || rep.email.split('@')[0]}
+                      </div>
+                      <div className="text-2xl font-black text-slate-900">{repCount} Leads</div>
+                      <div className="text-[11px] text-gray-400 font-mono mt-0.5 truncate">{rep.email}</div>
+                    </div>
+                  );
+                })}
+
+                <div className="bg-amber-50 border border-amber-200 p-5 rounded-2xl">
+                  <div className="text-[10px] font-black uppercase text-amber-800 tracking-wider mb-1">Unassigned Leads Pool</div>
+                  <div className="text-2xl font-black text-amber-950">
+                    {crmLeads.filter(l => !l.assigned_to).length} Leads
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* All Leads Management & Re-assignment Table */}
+            <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                  <FileSpreadsheet className="text-emerald-600" size={24} />
+                  All System Leads ({crmLeads.length})
+                </h2>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Search */}
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-3.5 top-3 text-gray-400" size={16} />
+                    <input
+                      type="text"
+                      value={crmSearch}
+                      onChange={(e) => setCrmSearch(e.target.value)}
+                      placeholder="Search leads..."
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-medium"
+                    />
+                  </div>
+
+                  {/* Filter by Rep */}
+                  <select
+                    value={crmRepFilter}
+                    onChange={(e) => setCrmRepFilter(e.target.value)}
+                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium"
+                  >
+                    <option value="all">All Sales Reps</option>
+                    <option value="unassigned">Unassigned Only</option>
+                    {salesReps.map((r, i) => (
+                      <option key={i} value={r.email}>{r.full_name || r.email}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-50 text-gray-700 font-bold border-b border-gray-200">
+                    <tr>
+                      <th className="p-3">#</th>
+                      <th className="p-3">Lead Name</th>
+                      <th className="p-3">Phone</th>
+                      <th className="p-3">Email</th>
+                      <th className="p-3">Stage</th>
+                      <th className="p-3">Assigned Sales Rep</th>
+                      <th className="p-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-slate-900 font-medium">
+                    {crmLeads
+                      .filter(l => {
+                        const matchSearch = l.name?.toLowerCase().includes(crmSearch.toLowerCase()) ||
+                          l.phone?.includes(crmSearch) ||
+                          l.email?.toLowerCase().includes(crmSearch.toLowerCase());
+                        if (!matchSearch) return false;
+
+                        if (crmRepFilter === 'unassigned') return !l.assigned_to;
+                        if (crmRepFilter !== 'all') return l.assigned_to?.toLowerCase() === crmRepFilter.toLowerCase();
+                        return true;
+                      })
+                      .map((lead, idx) => (
+                        <tr key={lead.id || idx} className="hover:bg-gray-50">
+                          <td className="p-3 font-mono text-gray-400">{idx + 1}</td>
+                          <td className="p-3 font-bold">{lead.name}</td>
+                          <td className="p-3 font-mono text-emerald-700">{lead.phone}</td>
+                          <td className="p-3 font-mono text-gray-500">{lead.email || '—'}</td>
+                          <td className="p-3 capitalize">
+                            <span className="bg-gray-100 text-gray-800 px-2 py-0.5 rounded-full font-bold text-[10px]">
+                              {lead.status || 'new'}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <select
+                              value={lead.assigned_to || ''}
+                              onChange={(e) => handleReassignLead(lead.id, e.target.value)}
+                              className="bg-white border border-gray-200 rounded-lg p-1.5 text-xs text-slate-900 font-medium focus:border-emerald-600"
+                            >
+                              <option value="">Unassigned</option>
+                              {salesReps.map((r, i) => (
+                                <option key={i} value={r.email}>{r.full_name || r.email}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="p-3 text-right">
+                            <button
+                              onClick={() => handleDeleteLead(lead.id)}
+                              className="text-gray-400 hover:text-rose-600 p-1 transition-colors"
+                              title="Delete Lead"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         )}
 
         {adminTab === 'sales' && (
