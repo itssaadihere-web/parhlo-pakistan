@@ -78,7 +78,7 @@ export default function AllCourses() {
     setLoading(true);
     const { data, error } = await supabase
       .from('courses')
-      .select('name, price, discount, students, rating, tag, slug, category, thumbnail, instructorImage')
+      .select('*')
       .order('created_at', { ascending: false });
 
     if (error) {

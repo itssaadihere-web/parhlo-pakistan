@@ -19,9 +19,13 @@ import {
   Percent,
   CreditCard,
   Building2,
-  ShieldAlert
+  ShieldCheck,
+  BookOpen,
+  Menu,
+  X
 } from 'lucide-react';
 import { supabase } from '@/utils/supabase';
+import InactivityTracker from '@/app/components/InactivityTracker';
 import { formatCurrency, parsePrice } from '@/utils/currencyHelpers';
 
 const SALES_EMAILS = [
@@ -33,6 +37,8 @@ export default function SalesDashboard() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState({ email: '', role: '', isSales: false, isAdmin: false });
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Form State
   const [studentEmail, setStudentEmail] = useState('');
@@ -48,20 +54,21 @@ export default function SalesDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const email = (window.localStorage.getItem('currentUserEmail') || '').toLowerCase().trim();
-    const role = window.localStorage.getItem('parhloRole');
-    const isAdmin = window.localStorage.getItem('parhloAdmin') === 'true' || role === 'admin';
-    const isSales = SALES_EMAILS.includes(email) || role === 'sales';
+    if (typeof window !== 'undefined') {
+      const email = (window.localStorage.getItem('currentUserEmail') || '').toLowerCase().trim();
+      const role = window.localStorage.getItem('parhloRole');
+      const isAdmin = window.localStorage.getItem('parhloAdmin') === 'true' || role === 'admin';
+      const isSales = SALES_EMAILS.includes(email) || role === 'sales';
 
-    if (!isAdmin && !isSales) {
-      alert("Access Denied: Sales Portal is restricted to authorized Sales personnel and Admin.");
-      router.replace('/');
-      return;
+      if (!isAdmin && !isSales) {
+        alert("Access Denied: Sales Portal is restricted to authorized Sales personnel and Admin.");
+        router.replace('/');
+        return;
+      }
+
+      setCurrentUser({ email, role: isAdmin ? 'admin' : 'sales', isSales, isAdmin });
+      fetchCoursesAndOffers();
     }
-
-    setCurrentUser({ email, role: isAdmin ? 'admin' : 'sales', isSales, isAdmin });
-    fetchCoursesAndOffers();
   }, []);
 
   const fetchCoursesAndOffers = async () => {
@@ -150,10 +157,8 @@ export default function SalesDashboard() {
     };
 
     // Try DB insertion
-    let dbSuccess = false;
     try {
-      const { error } = await supabase.from('sales_offers').insert([newOffer]);
-      if (!error) dbSuccess = true;
+      await supabase.from('sales_offers').insert([newOffer]);
     } catch (err) {
       console.warn("DB insert fallback to local storage:", err);
     }
@@ -200,85 +205,192 @@ export default function SalesDashboard() {
     o.course_slug?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const activeOffersCount = offers.filter(o => o.status === 'active').length;
+  const redeemedOffersCount = offers.filter(o => o.status === 'redeemed').length;
+
+  const menuItems = [
+    { name: 'Dashboard', icon: <BookOpen size={20} />, id: 'overview' },
+    { name: 'Generate Offer', icon: <PlusCircle size={20} />, id: 'create' },
+    { name: 'Active Offers', icon: <Tag size={20} />, id: 'offers' }
+  ];
+
+  const salesName = currentUser.email ? currentUser.email.split('@')[0] : 'Sales Rep';
+
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
-      {/* Top Header Navigation */}
-      <header className="bg-slate-800 border-b border-slate-700 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+    <div className="flex min-h-screen bg-[#F8FAFC] font-sans text-slate-900">
+      <InactivityTracker onLogout={handleLogout} timeoutMs={15 * 60 * 1000} />
+
+      {/* Desktop Sidebar */}
+      <aside className="w-64 bg-white border-r border-gray-100 flex flex-col hidden md:flex">
+        <div className="p-6 flex items-center gap-3 border-b border-gray-50">
+          <Link href="/" className="flex items-center gap-2">
+            <img src="/logo.png" alt="Logo" className="h-10 cursor-pointer logo-outline" />
+          </Link>
+          <span className="font-bold text-green-800 text-sm bg-green-50 px-2.5 py-1 rounded-lg border border-green-200">
+            Sales
+          </span>
+        </div>
+        
+        <div className="p-6 flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-green-100 text-green-700 flex items-center justify-center font-black text-xl uppercase shadow-sm border border-green-200">
+            {salesName.charAt(0)}
+          </div>
+          <div>
+            <p className="font-bold text-sm text-gray-900">Welcome,</p>
+            <p className="text-xs text-gray-500 font-medium truncate max-w-[120px]">{salesName}</p>
+          </div>
+        </div>
+
+        <nav className="flex-1 px-4 space-y-2 mt-2">
+          {menuItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${
+                activeTab === item.id 
+                ? 'bg-[#064e3b] text-white shadow-md' 
+                : 'text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              {item.icon} {item.name}
+            </button>
+          ))}
+        </nav>
+
+        <button 
+          onClick={handleLogout} 
+          className="m-6 flex items-center gap-3 px-4 py-3 text-gray-500 font-bold text-sm hover:text-red-600 transition-colors rounded-xl hover:bg-red-50"
+        >
+          <LogOut size={20} /> Sign Out
+        </button>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 p-6 md:p-10 overflow-y-auto relative">
+        
+        {/* Mobile Header */}
+        <div className="md:hidden flex justify-between items-center mb-8 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
           <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-xl flex items-center justify-center font-black text-slate-950 text-xl shadow-lg shadow-emerald-500/20">
-                P
+            <button onClick={() => setIsMobileMenuOpen(true)} className="text-gray-500 hover:text-gray-900"><Menu size={24}/></button>
+            <img src="/logo.png" alt="Logo" className="h-10 logo-outline" />
+            <span className="font-bold text-green-800 text-xs bg-green-50 px-2 py-0.5 rounded">Sales</span>
+          </div>
+          <button onClick={handleLogout} className="text-gray-500 hover:text-red-600"><LogOut size={20}/></button>
+        </div>
+
+        {/* Mobile Sidebar Overlay */}
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 z-[100] flex">
+            <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>
+            <aside className="w-64 bg-white border-r border-gray-100 flex flex-col h-full relative z-10 shadow-2xl transition-transform">
+              <button 
+                onClick={() => setIsMobileMenuOpen(false)} 
+                className="absolute top-6 right-6 text-gray-400 hover:text-gray-900"
+              >
+                <X size={24} />
+              </button>
+              <div className="p-6 flex items-center gap-3 border-b border-gray-50">
+                <Link href="/">
+                  <img src="/logo.png" alt="Logo" className="h-10 cursor-pointer logo-outline" />
+                </Link>
+                <span className="font-bold text-green-800 text-xs bg-green-50 px-2 py-0.5 rounded">Sales</span>
               </div>
-              <span className="text-xl font-black tracking-tight text-white">
-                PARHLO <span className="text-emerald-400">SALES</span>
-              </span>
-            </Link>
-            <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
-              {currentUser.isAdmin ? 'Admin Sales Portal' : 'Sales Representative'}
+              
+              <div className="p-6 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-green-100 text-green-700 flex items-center justify-center font-black text-xl uppercase">
+                  {salesName.charAt(0)}
+                </div>
+                <div>
+                  <p className="font-bold text-sm text-gray-900">Welcome,</p>
+                  <p className="text-xs text-gray-500 font-medium truncate max-w-[120px]">{salesName}</p>
+                </div>
+              </div>
+
+              <nav className="flex-1 px-4 space-y-2 mt-2">
+                {menuItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => { setActiveTab(item.id); setIsMobileMenuOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-sm transition-all ${
+                      activeTab === item.id 
+                      ? 'bg-[#064e3b] text-white shadow-md' 
+                      : 'text-gray-500 hover:bg-gray-50'
+                    }`}
+                  >
+                    {item.icon} {item.name}
+                  </button>
+                ))}
+              </nav>
+
+              <button 
+                onClick={handleLogout} 
+                className="m-6 flex items-center gap-3 px-4 py-3 text-gray-500 font-bold text-sm hover:text-red-600 transition-colors rounded-xl hover:bg-red-50"
+              >
+                <LogOut size={20} /> Sign Out
+              </button>
+            </aside>
+          </div>
+        )}
+
+        {/* Dashboard Overview Header */}
+        <header className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-black text-slate-900 mb-1">Sales Representative Portal</h1>
+            <p className="text-gray-500 font-medium text-sm">Issue private discount offers, 1-Month Free Access, and custom installment plans.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-4 py-2 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-sm">
+              <ShieldCheck size={16} className="text-emerald-600" />
+              {currentUser.isAdmin ? 'Admin Full Discount Rights' : 'Sales Cap: Max 5% Discount'}
             </span>
           </div>
+        </header>
 
-          <div className="flex items-center gap-4">
-            <div className="hidden sm:flex flex-col text-right">
-              <span className="text-sm font-bold text-slate-200">{currentUser.email}</span>
-              <span className="text-xs text-slate-400 capitalize">{currentUser.role} Account</span>
-            </div>
-
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 bg-slate-700 hover:bg-rose-600/80 text-slate-200 hover:text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all"
-            >
-              <LogOut size={16} />
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content Container */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        
-        {/* Welcome & Notice Banner */}
-        <div className="bg-gradient-to-r from-emerald-900/40 via-slate-800 to-teal-900/40 border border-emerald-500/30 rounded-3xl p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden shadow-2xl">
-          <div className="space-y-2 relative z-10">
-            <h1 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
-              <Sparkles className="text-emerald-400" />
-              Sales Representative Command Center
-            </h1>
-            <p className="text-slate-300 text-sm max-w-2xl">
-              Create customized, private offers for prospective students. Discounts generated here remain strictly confidential and will only be displayed directly to the targeted student upon login.
-            </p>
-          </div>
-          <div className="bg-slate-900/80 border border-slate-700 p-4 rounded-2xl flex items-center gap-3 text-xs text-slate-300">
-            <ShieldAlert className="text-amber-400 flex-shrink-0" size={24} />
+        {/* Top Stat Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
+          <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center gap-4">
+            <div className="p-4 rounded-2xl bg-blue-50 text-blue-600"><Tag size={24} /></div>
             <div>
-              <span className="font-bold text-amber-300 block">Sales Discount Policy:</span>
-              Sales Reps can offer max 5% added discount or 1-Month Free Access (delayed 1st installment). Admin has unlimited discount rights.
+              <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Total Offers Issued</p>
+              <p className="text-2xl font-black text-gray-900">{offers.length}</p>
+            </div>
+          </div>
+          <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center gap-4">
+            <div className="p-4 rounded-2xl bg-emerald-50 text-emerald-600"><CheckCircle2 size={24} /></div>
+            <div>
+              <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Active Offers</p>
+              <p className="text-2xl font-black text-gray-900">{activeOffersCount}</p>
+            </div>
+          </div>
+          <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex items-center gap-4">
+            <div className="p-4 rounded-2xl bg-purple-50 text-purple-600"><Gift size={24} /></div>
+            <div>
+              <p className="text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Redeemed Offers</p>
+              <p className="text-2xl font-black text-gray-900">{redeemedOffersCount}</p>
             </div>
           </div>
         </div>
 
-        {/* Action Grid: Offer Form & Overview */}
+        {/* Action Grid: Form & Offers Table */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
           {/* Left Column: Form to Create Offer */}
-          <div className="lg:col-span-6 bg-slate-800 border border-slate-700 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl">
-            <div className="border-b border-slate-700 pb-4 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <PlusCircle className="text-emerald-400" />
-                Generate Private Student Offer
+          <div className="lg:col-span-5 bg-white border border-gray-100 rounded-[2.5rem] p-8 space-y-6 shadow-sm">
+            <div className="border-b border-gray-100 pb-4 flex items-center justify-between">
+              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                <PlusCircle className="text-emerald-600" size={22} />
+                Create Private Student Offer
               </h2>
-              <span className="text-xs bg-slate-700 text-slate-300 px-3 py-1 rounded-full font-mono">
-                Privately Targeted
+              <span className="text-[10px] bg-slate-100 text-slate-600 px-3 py-1 rounded-full font-bold uppercase tracking-wider">
+                Confidential
               </span>
             </div>
 
             {formMessage.text && (
               <div className={`p-4 rounded-2xl flex items-start gap-3 text-sm font-medium ${
                 formMessage.type === 'success' 
-                  ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300' 
-                  : 'bg-rose-500/10 border border-rose-500/30 text-rose-300'
+                  ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' 
+                  : 'bg-rose-50 border border-rose-200 text-rose-800'
               }`}>
                 {formMessage.type === 'success' ? <CheckCircle2 className="flex-shrink-0 mt-0.5" /> : <AlertCircle className="flex-shrink-0 mt-0.5" />}
                 <div>{formMessage.text}</div>
@@ -289,8 +401,8 @@ export default function SalesDashboard() {
               
               {/* Target Student Email */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-                  Target Student Email Address <span className="text-rose-400">*</span>
+                <label className="text-xs font-bold text-gray-700 uppercase tracking-wider block">
+                  Target Student Email <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="email"
@@ -298,19 +410,19 @@ export default function SalesDashboard() {
                   value={studentEmail}
                   onChange={(e) => setStudentEmail(e.target.value)}
                   placeholder="e.g. student@gmail.com"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3.5 text-slate-100 text-sm focus:outline-none focus:border-emerald-500 transition-all font-medium"
+                  className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-medium text-sm text-slate-900"
                 />
               </div>
 
               {/* Target Course Selection */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-                  Target Course <span className="text-rose-400">*</span>
+                <label className="text-xs font-bold text-gray-700 uppercase tracking-wider block">
+                  Target Course <span className="text-rose-500">*</span>
                 </label>
                 <select
                   value={selectedCourseSlug}
                   onChange={(e) => setSelectedCourseSlug(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3.5 text-slate-100 text-sm focus:outline-none focus:border-emerald-500 transition-all font-medium"
+                  className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-medium text-sm text-slate-900"
                 >
                   {courses.map(c => (
                     <option key={c.id || c.slug} value={c.slug}>
@@ -322,8 +434,8 @@ export default function SalesDashboard() {
 
               {/* Offer Type Selection */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-                  Offer Type <span className="text-rose-400">*</span>
+                <label className="text-xs font-bold text-gray-700 uppercase tracking-wider block">
+                  Offer Type <span className="text-rose-500">*</span>
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   
@@ -332,11 +444,11 @@ export default function SalesDashboard() {
                     onClick={() => setOfferType('added_discount')}
                     className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all ${
                       offerType === 'added_discount'
-                        ? 'bg-emerald-500/20 border-emerald-500 text-white shadow-lg'
-                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-600'
+                        ? 'bg-emerald-50 border-emerald-600 text-emerald-950 font-bold shadow-sm'
+                        : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'
                     }`}
                   >
-                    <Percent className="mb-2 text-emerald-400" size={20} />
+                    <Percent className="mb-2 text-emerald-600" size={20} />
                     <div>
                       <div className="font-bold text-xs">Added Discount</div>
                       <div className="text-[10px] opacity-75 mt-0.5">Up to {currentUser.isAdmin ? '100%' : '5%'} extra</div>
@@ -348,11 +460,11 @@ export default function SalesDashboard() {
                     onClick={() => setOfferType('free_month_trial')}
                     className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all ${
                       offerType === 'free_month_trial'
-                        ? 'bg-emerald-500/20 border-emerald-500 text-white shadow-lg'
-                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-600'
+                        ? 'bg-emerald-50 border-emerald-600 text-emerald-950 font-bold shadow-sm'
+                        : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'
                     }`}
                   >
-                    <Gift className="mb-2 text-emerald-400" size={20} />
+                    <Gift className="mb-2 text-emerald-600" size={20} />
                     <div>
                       <div className="font-bold text-xs">1-Month Free Access</div>
                       <div className="text-[10px] opacity-75 mt-0.5">Delayed 1st Inst. (1/12th limit)</div>
@@ -364,11 +476,11 @@ export default function SalesDashboard() {
                     onClick={() => setOfferType('discounted_installment')}
                     className={`p-3 rounded-2xl border text-left flex flex-col justify-between transition-all ${
                       offerType === 'discounted_installment'
-                        ? 'bg-emerald-500/20 border-emerald-500 text-white shadow-lg'
-                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-600'
+                        ? 'bg-emerald-50 border-emerald-600 text-emerald-950 font-bold shadow-sm'
+                        : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'
                     }`}
                   >
-                    <CreditCard className="mb-2 text-emerald-400" size={20} />
+                    <CreditCard className="mb-2 text-emerald-600" size={20} />
                     <div>
                       <div className="font-bold text-xs">Custom Installment</div>
                       <div className="text-[10px] opacity-75 mt-0.5">Discounted monthly plan</div>
@@ -380,10 +492,10 @@ export default function SalesDashboard() {
 
               {/* Conditional Inputs based on Offer Type */}
               {offerType === 'added_discount' && (
-                <div className="space-y-2 bg-slate-900/60 p-4 rounded-2xl border border-slate-700/60">
+                <div className="space-y-2 bg-gray-50 p-4 rounded-2xl border border-gray-200">
                   <div className="flex justify-between items-center text-xs">
-                    <label className="font-bold text-slate-300">Additional Discount Percentage (%)</label>
-                    <span className="text-emerald-400 font-mono font-bold">
+                    <label className="font-bold text-gray-700">Additional Discount Percentage (%)</label>
+                    <span className="text-emerald-700 font-mono font-bold">
                       {currentUser.isAdmin ? 'Admin (Unlimited)' : 'Sales Cap: Max 5%'}
                     </span>
                   </div>
@@ -394,47 +506,47 @@ export default function SalesDashboard() {
                     value={discountPercent}
                     onChange={(e) => setDiscountPercent(e.target.value)}
                     placeholder="Enter percentage (e.g. 5)"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-100 text-sm focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-white border border-gray-200 rounded-xl p-3 text-slate-900 text-sm focus:outline-none focus:border-emerald-600 font-medium"
                   />
                 </div>
               )}
 
               {offerType === 'free_month_trial' && (
-                <div className="bg-slate-900/80 p-4 rounded-2xl border border-emerald-500/30 text-xs text-slate-300 space-y-2">
-                  <div className="font-bold text-emerald-300 flex items-center gap-1.5">
+                <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200 text-xs text-emerald-900 space-y-2">
+                  <div className="font-bold text-emerald-800 flex items-center gap-1.5">
                     <Gift size={16} /> 1-Month Free Access Protocol
                   </div>
-                  <ul className="list-disc list-inside space-y-1 text-slate-400">
+                  <ul className="list-disc list-inside space-y-1 text-emerald-800/90">
                     <li>Student pays <strong>Rs. 0 today</strong> to get instant trial access.</li>
-                    <li>1st installment is <strong>delayed</strong> to month 2 and paid together with the 2nd installment.</li>
-                    <li>Student is restricted to watch up to <strong>1/12th of total course video duration</strong> during the trial.</li>
+                    <li>1st installment is <strong>delayed</strong> to month 2 and paid together with 2nd installment.</li>
+                    <li>Student is restricted to watch up to <strong>1/12th of total course video duration per week</strong> and <strong>1/3rd total in Month 1</strong>.</li>
                     <li>Teacher panel will show <strong>0 PKR collected</strong> during the free trial period.</li>
                   </ul>
                 </div>
               )}
 
               {offerType === 'discounted_installment' && (
-                <div className="space-y-2 bg-slate-900/60 p-4 rounded-2xl border border-slate-700/60">
-                  <label className="text-xs font-bold text-slate-300">Custom Monthly Installment Price (PKR)</label>
+                <div className="space-y-2 bg-gray-50 p-4 rounded-2xl border border-gray-200">
+                  <label className="text-xs font-bold text-gray-700 block">Custom Monthly Installment Price (PKR)</label>
                   <input
                     type="number"
                     value={customInstallment}
                     onChange={(e) => setCustomInstallment(e.target.value)}
                     placeholder={`Default: Rs. ${Math.round(basePrice / 3)}`}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-100 text-sm focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-white border border-gray-200 rounded-xl p-3 text-slate-900 text-sm focus:outline-none focus:border-emerald-600 font-medium"
                   />
                 </div>
               )}
 
               {/* Offer Calculation Summary Card */}
-              <div className="bg-emerald-950/40 border border-emerald-500/20 p-4 rounded-2xl space-y-2 text-xs">
-                <div className="text-slate-400 font-semibold uppercase tracking-wider">Offer Breakdown Preview</div>
+              <div className="bg-slate-900 text-white p-5 rounded-2xl space-y-2 text-xs shadow-md">
+                <div className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Offer Breakdown Preview</div>
                 <div className="flex justify-between text-slate-300">
                   <span>Standard Public Price:</span>
                   <span className="font-mono">{formatCurrency(basePrice)}</span>
                 </div>
-                <div className="flex justify-between text-emerald-400 font-bold text-sm pt-1 border-t border-slate-700">
-                  <span>Student Offerd Price:</span>
+                <div className="flex justify-between text-emerald-400 font-bold text-sm pt-2 border-t border-slate-800">
+                  <span>Student Offered Price:</span>
                   <span>{formatCurrency(calculatedDiscountedPrice)}</span>
                 </div>
                 <div className="flex justify-between text-slate-300 text-[11px]">
@@ -446,7 +558,7 @@ export default function SalesDashboard() {
               {/* Submit Button */}
               <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black py-4 rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 uppercase tracking-wider text-sm"
+                className="w-full bg-[#064e3b] hover:bg-green-700 text-white font-black py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-wider text-sm"
               >
                 <Send size={18} />
                 Generate & Issue Private Offer
@@ -456,90 +568,90 @@ export default function SalesDashboard() {
           </div>
 
           {/* Right Column: Active Private Offers List */}
-          <div className="lg:col-span-6 bg-slate-800 border border-slate-700 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl">
-            <div className="border-b border-slate-700 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="lg:col-span-7 bg-white border border-gray-100 rounded-[2.5rem] p-8 space-y-6 shadow-sm">
+            <div className="border-b border-gray-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <Tag className="text-emerald-400" />
-                  Active Private Student Offers
+                <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                  <Tag className="text-emerald-600" size={22} />
+                  Active Private Offers
                 </h2>
-                <p className="text-xs text-slate-400 mt-1">Total Offers Issued: {offers.length}</p>
+                <p className="text-xs text-gray-500 mt-1">Total Offers Issued: {offers.length}</p>
               </div>
 
               {/* Search Bar */}
               <div className="relative">
-                <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                <Search className="absolute left-3 top-3 text-gray-400" size={16} />
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Search student email..."
-                  className="bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-medium"
                 />
               </div>
             </div>
 
             {/* List of Offers */}
             {filteredOffers.length === 0 ? (
-              <div className="text-center py-12 text-slate-400 space-y-3">
-                <Tag size={40} className="mx-auto text-slate-600" />
-                <p className="text-sm font-medium">No private offers found matching criteria.</p>
+              <div className="text-center py-16 text-gray-400 space-y-3">
+                <Tag size={48} className="mx-auto text-gray-300" />
+                <p className="text-sm font-bold text-gray-500">No private offers found matching your query.</p>
               </div>
             ) : (
-              <div className="space-y-3 max-h-[580px] overflow-y-auto pr-1">
+              <div className="space-y-4 max-h-[580px] overflow-y-auto pr-1">
                 {filteredOffers.map((offer) => {
                   const courseObj = courses.find(c => c.slug === offer.course_slug);
                   return (
                     <div
                       key={offer.id}
-                      className="bg-slate-900 border border-slate-700/80 hover:border-emerald-500/50 p-4 rounded-2xl space-y-3 transition-all"
+                      className="bg-gray-50/80 border border-gray-200/80 hover:border-emerald-500/50 p-5 rounded-2xl space-y-3 transition-all shadow-sm hover:shadow-md"
                     >
                       <div className="flex items-start justify-between">
                         <div>
-                          <span className="text-xs font-mono text-emerald-400 font-bold block">
+                          <span className="text-xs font-mono text-emerald-700 font-bold block">
                             {offer.student_email}
                           </span>
-                          <span className="text-sm font-bold text-white">
+                          <span className="text-base font-bold text-slate-900">
                             {courseObj ? courseObj.name : offer.course_slug}
                           </span>
                         </div>
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                           offer.status === 'redeemed' 
-                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' 
-                            : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            ? 'bg-purple-100 text-purple-800 border border-purple-200' 
+                            : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                         }`}>
                           {offer.status}
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-between text-xs bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+                      <div className="flex items-center justify-between text-xs bg-white p-3 rounded-xl border border-gray-200">
                         <div>
-                          <span className="text-slate-400 block text-[10px]">Offer Type:</span>
-                          <span className="font-semibold text-slate-200 capitalize">
+                          <span className="text-gray-400 block text-[10px] uppercase font-bold">Offer Type:</span>
+                          <span className="font-bold text-slate-800 capitalize">
                             {offer.offer_type === 'added_discount' && `${offer.discount_percent}% Added Discount`}
                             {offer.offer_type === 'free_month_trial' && `1-Month Free Access (0 PKR)`}
-                            {offer.offer_type === 'discounted_installment' && `Custom Installments`}
+                            {offer.offer_type === 'discounted_installment' && `Custom Monthly Installments`}
                           </span>
                         </div>
 
                         <div className="text-right">
-                          <span className="text-slate-400 block text-[10px]">Offered Price:</span>
-                          <span className="font-bold font-mono text-emerald-400">
+                          <span className="text-gray-400 block text-[10px] uppercase font-bold">Offered Price:</span>
+                          <span className="font-mono font-bold text-emerald-700 text-sm">
                             {formatCurrency(offer.custom_total_price)}
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
-                        <span>Issued by: <strong className="text-slate-300">{offer.sales_email}</strong></span>
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1">
+                        <span>Issued by: <strong className="text-slate-800">{offer.sales_email}</strong></span>
+                        <div className="flex items-center gap-3">
                           <span>{new Date(offer.created_at).toLocaleDateString()}</span>
                           <button
                             onClick={() => handleRevokeOffer(offer.id)}
-                            className="text-slate-500 hover:text-rose-400 p-1 transition-colors"
+                            className="text-gray-400 hover:text-rose-600 p-1 transition-colors"
                             title="Revoke Offer"
                           >
-                            <Trash2 size={15} />
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </div>
