@@ -693,7 +693,7 @@ export default function AdminDashboard() {
                         return true;
                       })
                       .map((lead, idx) => (
-                        <tr key={lead.id || idx} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedLead(lead)}>
+                        <tr key={lead.id || `admin_lead_${idx}`} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedLead(lead)}>
                           <td className="p-3 font-mono text-gray-400">{idx + 1}</td>
                           <td className="p-3 font-bold text-slate-900">{lead.name}</td>
                           <td className="p-3 font-mono text-emerald-700">{lead.phone}</td>

@@ -185,13 +185,13 @@ export default function LeadKanbanBoard({
                       No leads
                     </div>
                   ) : (
-                    stageLeads.map((lead) => {
+                    stageLeads.map((lead, idx) => {
                       const formattedPhone = formatPakistaniPhone(lead.phone);
                       const isDueToday = lead.next_followup_at && new Date(lead.next_followup_at).toISOString().slice(0, 10) === todayStr;
 
                       return (
                         <div
-                          key={lead.id}
+                          key={lead.id || lead.phone || lead.email || `kanban_lead_${idx}`}
                           onClick={() => onSelectLead(lead)}
                           className={`bg-white border p-4 rounded-2xl space-y-3 cursor-pointer hover:shadow-md transition-all group relative ${
                             isDueToday ? 'border-rose-400 ring-2 ring-rose-100' : 'border-gray-200 hover:border-emerald-500'
@@ -268,12 +268,12 @@ export default function LeadKanbanBoard({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 text-slate-900 font-medium">
-              {filteredLeads.map((lead) => {
+              {filteredLeads.map((lead, idx) => {
                 const stageObj = STAGES.find(s => s.id === lead.status) || STAGES[0];
                 const formattedPhone = formatPakistaniPhone(lead.phone);
                 return (
                   <tr
-                    key={lead.id}
+                    key={lead.id || lead.phone || lead.email || `list_lead_${idx}`}
                     onClick={() => onSelectLead(lead)}
                     className="hover:bg-emerald-50/50 cursor-pointer transition-colors"
                   >

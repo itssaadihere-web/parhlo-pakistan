@@ -111,7 +111,10 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
           assignedTo = selectedRep;
         }
 
+        const generatedId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'lead_' + Date.now() + '_' + idx + '_' + Math.random().toString(36).substr(2, 5);
+
         return {
+          id: generatedId,
           name: rawName,
           phone: formatPakistaniPhone(rawPhone) || rawPhone,
           email: rawEmail,
@@ -133,7 +136,7 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
         console.warn('DB error, using local fallback:', error);
       }
 
-      const insertedLeads = data || leadsToInsert.map(l => ({ ...l, id: 'lead_' + Math.random().toString(36).substr(2, 9) }));
+      const insertedLeads = data || leadsToInsert;
 
       // Also save to localStorage fallback
       const existingLocal = JSON.parse(window.localStorage.getItem('parhlo_leads') || '[]');
