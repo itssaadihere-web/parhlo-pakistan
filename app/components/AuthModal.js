@@ -83,8 +83,14 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
           }
           fetchedUser = { role: 'teacher' };
         } else {
-          alert("Login failed: " + error.message);
-          return;
+          // Fallback check against public.users table for custom reset passwords
+          const { data: dbUser } = await supabase.from('users').select('*').ilike('email', lower).single();
+          if (dbUser && dbUser.password && dbUser.password === password) {
+            fetchedUser = dbUser;
+          } else {
+            alert("Login failed: " + error.message);
+            return;
+          }
         }
       } else {
         // Fetch the user record from public.users table to get the true role
