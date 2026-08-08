@@ -127,6 +127,12 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
       window.localStorage.setItem('currentUserEmail', lowerEmail);
       window.localStorage.setItem('parhloRole', finalRole);
     }
+
+    if (finalRole === 'student') {
+      try {
+        await supabase.from('leads').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('email', lowerEmail);
+      } catch (e) {}
+    }
     
     onLoginSuccess && onLoginSuccess(finalRole);
     onClose();

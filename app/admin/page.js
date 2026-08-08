@@ -1516,11 +1516,22 @@ export default function AdminDashboard() {
                               </div>
                               <div>
                                 <span className="font-bold text-slate-900 block font-mono text-xs">{offer.student_email}</span>
-                                {students.some(s => s.email?.toLowerCase() === offer.student_email?.toLowerCase()) ? (
-                                  <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">Enrolled Student</span>
-                                ) : (
-                                  <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded">Prospect Lead</span>
-                                )}
+                                {(() => {
+                                  const isRegistered = students.some(s => s.email?.toLowerCase() === offer.student_email?.toLowerCase());
+                                  const hasPaid = payments.some(p => 
+                                    p.userEmail?.toLowerCase() === offer.student_email?.toLowerCase() && 
+                                    (p.courseSlug || '').trim().toLowerCase() === (offer.course_slug || '').trim().toLowerCase() && 
+                                    (p.amount_paid > 0 || (p.status === 'approved' && p.paymentPlan !== 'free_trial'))
+                                  );
+
+                                  if (isRegistered && hasPaid) {
+                                    return <span className="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-1.5 py-0.5 rounded">Enrolled (Paid)</span>;
+                                  } else if (isRegistered) {
+                                    return <span className="text-[10px] text-cyan-800 font-bold bg-cyan-100 px-1.5 py-0.5 rounded">Signed In</span>;
+                                  } else {
+                                    return <span className="text-[10px] text-amber-800 font-bold bg-amber-100 px-1.5 py-0.5 rounded">Prospect Lead</span>;
+                                  }
+                                })()}
                               </div>
                             </div>
                           </td>

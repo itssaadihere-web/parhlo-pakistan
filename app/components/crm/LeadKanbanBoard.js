@@ -25,7 +25,8 @@ const STAGES = [
   { id: 'contacted', label: 'Contacted', badge: 'bg-amber-100 text-amber-800 border-amber-200' },
   { id: 'interested', label: 'Interested', badge: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
   { id: 'demo_scheduled', label: 'Demo / Trial', badge: 'bg-purple-100 text-purple-800 border-purple-200' },
-  { id: 'converted', label: 'Converted', badge: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+  { id: 'signed_in', label: 'Signed In', badge: 'bg-cyan-100 text-cyan-800 border-cyan-200' },
+  { id: 'converted', label: 'Converted (Paid)', badge: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
   { id: 'lost', label: 'Lost / Unqualified', badge: 'bg-rose-100 text-rose-800 border-rose-200' }
 ];
 
