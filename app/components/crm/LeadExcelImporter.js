@@ -30,6 +30,11 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
   const [statusMessage, setStatusMessage] = useState({ type: '', text: '' });
   const [isDragOver, setIsDragOver] = useState(false);
 
+  // Duplicate Lead States
+  const [excludeDuplicates, setExcludeDuplicates] = useState(true);
+  const [showDuplicatesList, setShowDuplicatesList] = useState(false);
+  const [duplicateSummary, setDuplicateSummary] = useState({ uniqueRows: [], duplicateRows: [] });
+
   const handleFileSelect = (e) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) processFile(selectedFile);
@@ -42,9 +47,85 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
     if (droppedFile) processFile(droppedFile);
   };
 
-  const processFile = (fileToProcess) => {
+  const analyzeDuplicates = (rows, mapConfig, dbLeadsList = []) => {
+    const phoneMap = new Map();
+    const emailMap = new Map();
+
+    dbLeadsList.forEach(l => {
+      const p = formatPakistaniPhone(l.phone);
+      const e = (l.email || '').trim().toLowerCase();
+      if (p) phoneMap.set(p, l);
+      if (e) emailMap.set(e, l);
+    });
+
+    const seenInSheetPhones = new Map();
+    const seenInSheetEmails = new Map();
+
+    const uniqueRows = [];
+    const duplicateRows = [];
+
+    rows.forEach((row, idx) => {
+      const rawPhone = row[mapConfig.phoneCol] ? String(row[mapConfig.phoneCol]).trim() : '';
+      const rawEmail = row[mapConfig.emailCol] ? String(row[mapConfig.emailCol]).trim().toLowerCase() : '';
+      const formattedPhone = formatPakistaniPhone(rawPhone);
+      const name = row[mapConfig.nameCol] ? String(row[mapConfig.nameCol]).trim() : `Row #${idx + 2}`;
+
+      let isDup = false;
+      let reason = '';
+
+      // Check DB match
+      if (formattedPhone && phoneMap.has(formattedPhone)) {
+        isDup = true;
+        const match = phoneMap.get(formattedPhone);
+        reason = `Matches existing DB lead (${match.name || 'Student'}, Phone: ${match.phone}, Assigned: ${match.assigned_to || 'Unassigned'})`;
+      } else if (rawEmail && emailMap.has(rawEmail)) {
+        isDup = true;
+        const match = emailMap.get(rawEmail);
+        reason = `Matches existing DB lead (${match.name || 'Student'}, Email: ${match.email}, Assigned: ${match.assigned_to || 'Unassigned'})`;
+      }
+
+      // Check Intra-Sheet match
+      if (!isDup) {
+        if (formattedPhone && seenInSheetPhones.has(formattedPhone)) {
+          isDup = true;
+          reason = `Duplicate entry in Excel sheet (Repeats row #${seenInSheetPhones.get(formattedPhone)})`;
+        } else if (rawEmail && seenInSheetEmails.has(rawEmail)) {
+          isDup = true;
+          reason = `Duplicate entry in Excel sheet (Repeats row #${seenInSheetEmails.get(rawEmail)})`;
+        }
+      }
+
+      const item = { row, idx, isDup, reason, formattedPhone, rawEmail, name };
+
+      if (isDup) {
+        duplicateRows.push(item);
+      } else {
+        uniqueRows.push(item);
+        if (formattedPhone) seenInSheetPhones.set(formattedPhone, idx + 2);
+        if (rawEmail) seenInSheetEmails.set(rawEmail, idx + 2);
+      }
+    });
+
+    setDuplicateSummary({ uniqueRows, duplicateRows });
+  };
+
+  const processFile = async (fileToProcess) => {
     setFile(fileToProcess);
     setStatusMessage({ type: '', text: '' });
+    setShowDuplicatesList(false);
+
+    // Fetch current DB leads for duplicate comparison
+    let currentDbLeads = [];
+    try {
+      const { data, error } = await supabase.from('leads').select('id, name, phone, email, assigned_to, status');
+      if (!error && data) {
+        currentDbLeads = data;
+      } else {
+        currentDbLeads = JSON.parse(window.localStorage.getItem('parhlo_leads') || '[]');
+      }
+    } catch (e) {
+      currentDbLeads = JSON.parse(window.localStorage.getItem('parhlo_leads') || '[]');
+    }
 
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -74,10 +155,13 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
           else if (lower.includes('note') || lower.includes('remark') || lower.includes('city')) notesCol = idx;
         });
 
-        setMapping({ nameCol, phoneCol, emailCol, courseCol, notesCol });
+        const newMapping = { nameCol, phoneCol, emailCol, courseCol, notesCol };
+        setMapping(newMapping);
 
         const rowsData = rawJson.slice(1).filter(r => r && r.length > 0 && (r[nameCol] || r[phoneCol] || r[emailCol]));
         setParsedRows(rowsData);
+
+        analyzeDuplicates(rowsData, newMapping, currentDbLeads);
       } catch (err) {
         console.error('Error parsing Excel file:', err);
         setStatusMessage({ type: 'error', text: 'Failed to read file. Please ensure it is a valid .xlsx or .csv file.' });
@@ -87,8 +171,27 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
     reader.readAsArrayBuffer(fileToProcess);
   };
 
+  const handleMappingChange = (key, val) => {
+    const updated = { ...mapping, [key]: val };
+    setMapping(updated);
+    if (parsedRows.length > 0) {
+      // Re-run analysis with updated column mapping
+      supabase.from('leads').select('id, name, phone, email, assigned_to, status').then(({ data }) => {
+        analyzeDuplicates(parsedRows, updated, data || []);
+      });
+    }
+  };
+
   const handleImport = async () => {
-    if (parsedRows.length === 0) return;
+    const rowsToUse = excludeDuplicates
+      ? duplicateSummary.uniqueRows.map(u => u.row)
+      : parsedRows;
+
+    if (rowsToUse.length === 0) {
+      setStatusMessage({ type: 'error', text: 'No leads available to import after excluding duplicates.' });
+      return;
+    }
+
     setUploading(true);
     setStatusMessage({ type: '', text: '' });
 
@@ -96,7 +199,7 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
       const activeReps = salesReps.length > 0 ? salesReps.map(r => r.email) : ['faiz.ali@parhlopakistan.com.pk', 'nabiha.irfan@parhlopakistan.com.pk'];
       let repIndex = 0;
 
-      const leadsToInsert = parsedRows.map((row, idx) => {
+      const leadsToInsert = rowsToUse.map((row, idx) => {
         const rawName = row[mapping.nameCol] ? String(row[mapping.nameCol]).trim() : `Lead ${idx + 1}`;
         const rawPhone = row[mapping.phoneCol] ? String(row[mapping.phoneCol]).trim() : '';
         const rawEmail = row[mapping.emailCol] ? String(row[mapping.emailCol]).trim().toLowerCase() : '';
@@ -143,9 +246,12 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
       const updatedLocal = [...insertedLeads, ...existingLocal];
       window.localStorage.setItem('parhlo_leads', JSON.stringify(updatedLocal));
 
+      const excludedCount = duplicateSummary.duplicateRows.length;
       setStatusMessage({
         type: 'success',
-        text: `Successfully imported and assigned ${insertedLeads.length} leads!`
+        text: excludeDuplicates && excludedCount > 0
+          ? `Successfully imported ${insertedLeads.length} unique new leads! (${excludedCount} duplicate entries were automatically excluded)`
+          : `Successfully imported and assigned ${insertedLeads.length} leads!`
       });
 
       if (onImportSuccess) onImportSuccess(insertedLeads);
@@ -153,6 +259,7 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
       // Reset
       setFile(null);
       setParsedRows([]);
+      setDuplicateSummary({ uniqueRows: [], duplicateRows: [] });
     } catch (err) {
       console.error(err);
       setStatusMessage({ type: 'error', text: 'Import failed: ' + err.message });
@@ -216,16 +323,70 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
               <FileSpreadsheet size={24} className="text-emerald-600" />
               <div>
                 <div className="font-bold text-slate-900">{file.name}</div>
-                <div className="text-gray-500">{parsedRows.length} valid lead rows detected</div>
+                <div className="text-gray-500">{parsedRows.length} valid lead rows detected in file</div>
               </div>
             </div>
             <button
-              onClick={() => { setFile(null); setParsedRows([]); }}
+              onClick={() => { setFile(null); setParsedRows([]); setDuplicateSummary({ uniqueRows: [], duplicateRows: [] }); }}
               className="text-gray-400 hover:text-rose-600 p-2 transition-colors"
             >
               <X size={20} />
             </button>
           </div>
+
+          {/* Duplicate Detection Alert & Exclusion Toggle */}
+          {duplicateSummary.duplicateRows.length > 0 && (
+            <div className="bg-amber-50/90 border border-amber-200 p-5 rounded-2xl space-y-3 text-xs">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2 text-amber-950 font-bold text-sm">
+                  <AlertCircle className="text-amber-600 flex-shrink-0" size={20} />
+                  <span>Duplicate Leads Detected! ({duplicateSummary.duplicateRows.length} rows)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDuplicatesList(!showDuplicatesList)}
+                  className="text-amber-900 font-extrabold underline hover:text-amber-950"
+                >
+                  {showDuplicatesList ? 'Hide Duplicate List' : `View ${duplicateSummary.duplicateRows.length} Duplicates`}
+                </button>
+              </div>
+
+              <p className="text-amber-800 leading-relaxed">
+                Found <strong>{duplicateSummary.duplicateRows.length} duplicate leads</strong> (matching existing database records or repeated inside this Excel sheet). 
+                {excludeDuplicates ? ' These will be automatically excluded during import.' : ' You have chosen to include them.'}
+              </p>
+
+              <label className="flex items-center gap-3 bg-white p-3 rounded-xl border border-amber-200 cursor-pointer font-bold text-slate-900 select-none hover:bg-amber-50/40 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={excludeDuplicates}
+                  onChange={(e) => setExcludeDuplicates(e.target.checked)}
+                  className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
+                />
+                <span>Automatically Exclude Duplicate Entries (Import only {duplicateSummary.uniqueRows.length} unique leads)</span>
+              </label>
+
+              {/* Collapsible Duplicate List */}
+              {showDuplicatesList && (
+                <div className="mt-3 bg-white rounded-xl border border-amber-200 p-3 max-h-56 overflow-y-auto space-y-2">
+                  <div className="font-bold text-gray-700 pb-1 border-b border-gray-100 flex justify-between">
+                    <span>Duplicate Entries Breakdown</span>
+                    <span>Row #</span>
+                  </div>
+                  {duplicateSummary.duplicateRows.map((item, dIdx) => (
+                    <div key={dIdx} className="p-2 rounded-lg bg-amber-50/50 flex flex-col sm:flex-row sm:items-center justify-between text-[11px] gap-1 border border-amber-100">
+                      <div>
+                        <span className="font-bold text-slate-900">{item.name}</span>
+                        <span className="text-gray-500 font-mono ml-2">({item.formattedPhone || item.rawEmail || 'No contact'})</span>
+                        <div className="text-amber-700 text-[10px] mt-0.5">{item.reason}</div>
+                      </div>
+                      <span className="font-mono text-amber-800 font-bold bg-amber-100 px-2 py-0.5 rounded text-[10px]">Row #{item.idx + 2}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Column Mapping Selector */}
           {headers.length > 0 && (
@@ -238,7 +399,7 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
                   <label className="font-bold text-gray-700 block mb-1">Full Name Column:</label>
                   <select
                     value={mapping.nameCol}
-                    onChange={(e) => setMapping({ ...mapping, nameCol: parseInt(e.target.value) })}
+                    onChange={(e) => handleMappingChange('nameCol', parseInt(e.target.value))}
                     className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-slate-900 font-medium"
                   >
                     {headers.map((h, i) => <option key={i} value={i}>{h || `Column ${i+1}`}</option>)}
@@ -249,7 +410,7 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
                   <label className="font-bold text-gray-700 block mb-1">Phone Number Column:</label>
                   <select
                     value={mapping.phoneCol}
-                    onChange={(e) => setMapping({ ...mapping, phoneCol: parseInt(e.target.value) })}
+                    onChange={(e) => handleMappingChange('phoneCol', parseInt(e.target.value))}
                     className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-slate-900 font-medium"
                   >
                     {headers.map((h, i) => <option key={i} value={i}>{h || `Column ${i+1}`}</option>)}
@@ -260,7 +421,7 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
                   <label className="font-bold text-gray-700 block mb-1">Email Address Column:</label>
                   <select
                     value={mapping.emailCol}
-                    onChange={(e) => setMapping({ ...mapping, emailCol: parseInt(e.target.value) })}
+                    onChange={(e) => handleMappingChange('emailCol', parseInt(e.target.value))}
                     className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-slate-900 font-medium"
                   >
                     {headers.map((h, i) => <option key={i} value={i}>{h || `Column ${i+1}`}</option>)}
@@ -344,7 +505,12 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
           <div className="space-y-2">
             <div className="flex justify-between items-center text-xs text-gray-500 font-medium">
               <span>Previewing First 5 Leads:</span>
-              <span>Total rows to process: <strong>{parsedRows.length}</strong></span>
+              <span>
+                To Import: <strong>{excludeDuplicates ? duplicateSummary.uniqueRows.length : parsedRows.length}</strong> 
+                {excludeDuplicates && duplicateSummary.duplicateRows.length > 0 && (
+                  <span className="text-amber-600 font-bold ml-1">({duplicateSummary.duplicateRows.length} duplicates excluded)</span>
+                )}
+              </span>
             </div>
 
             <div className="overflow-x-auto border border-gray-200 rounded-2xl">
@@ -352,6 +518,7 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
                 <thead className="bg-gray-100 text-gray-700 font-bold border-b border-gray-200">
                   <tr>
                     <th className="p-3">#</th>
+                    <th className="p-3">Status</th>
                     <th className="p-3">Name</th>
                     <th className="p-3">Phone</th>
                     <th className="p-3">Email</th>
@@ -359,15 +526,29 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white text-slate-900">
-                  {parsedRows.slice(0, 5).map((r, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50">
-                      <td className="p-3 font-mono text-gray-400">{idx + 1}</td>
-                      <td className="p-3 font-bold">{r[mapping.nameCol] || '—'}</td>
-                      <td className="p-3 font-mono text-emerald-700">{formatPakistaniPhone(r[mapping.phoneCol]) || r[mapping.phoneCol] || '—'}</td>
-                      <td className="p-3 font-mono text-gray-600">{r[mapping.emailCol] || '—'}</td>
-                      <td className="p-3 text-gray-500 truncate max-w-[150px]">{r[mapping.courseCol] || r[mapping.notesCol] || '—'}</td>
-                    </tr>
-                  ))}
+                  {parsedRows.slice(0, 5).map((r, idx) => {
+                    const isDup = duplicateSummary.duplicateRows.some(d => d.idx === idx);
+                    return (
+                      <tr key={idx} className={`hover:bg-gray-50 ${isDup && excludeDuplicates ? 'opacity-40 bg-rose-50/30' : ''}`}>
+                        <td className="p-3 font-mono text-gray-400">{idx + 1}</td>
+                        <td className="p-3">
+                          {isDup ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">
+                              {excludeDuplicates ? 'Duplicate (Excluded)' : 'Duplicate'}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                              New Lead
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 font-bold">{r[mapping.nameCol] || '—'}</td>
+                        <td className="p-3 font-mono text-emerald-700">{formatPakistaniPhone(r[mapping.phoneCol]) || r[mapping.phoneCol] || '—'}</td>
+                        <td className="p-3 font-mono text-gray-600">{r[mapping.emailCol] || '—'}</td>
+                        <td className="p-3 text-gray-500 truncate max-w-[150px]">{r[mapping.courseCol] || r[mapping.notesCol] || '—'}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -376,14 +557,14 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
           {/* Confirm Import Button */}
           <button
             onClick={handleImport}
-            disabled={uploading}
+            disabled={uploading || (excludeDuplicates && duplicateSummary.uniqueRows.length === 0)}
             className="w-full bg-[#064e3b] hover:bg-green-700 text-white font-black py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-wider text-sm disabled:opacity-50"
           >
             {uploading ? (
               <span>Importing Leads...</span>
             ) : (
               <>
-                <UserCheck size={18} /> Import & Assign {parsedRows.length} Leads
+                <UserCheck size={18} /> Import & Assign {excludeDuplicates ? duplicateSummary.uniqueRows.length : parsedRows.length} Leads
               </>
             )}
           </button>
@@ -392,3 +573,4 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
     </div>
   );
 }
+

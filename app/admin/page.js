@@ -101,6 +101,14 @@ export default function AdminDashboard() {
   const [offerFormMsg, setOfferFormMsg] = useState({ type: '', text: '' });
   const [copiedOfferId, setCopiedOfferId] = useState(null);
 
+  // Purge System Leads Modal States
+  const [isPurgeModalOpen, setIsPurgeModalOpen] = useState(false);
+  const [purgeEmail, setPurgeEmail] = useState('parhlo.pakistan.edu@gmail.com');
+  const [purgePassword, setPurgePassword] = useState('');
+  const [purgeError, setPurgeError] = useState('');
+  const [isPurging, setIsPurging] = useState(false);
+
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const admin = window.localStorage.getItem('parhloAdmin') === 'true';
@@ -307,18 +315,83 @@ export default function AdminDashboard() {
     window.localStorage.setItem('parhlo_leads', JSON.stringify(updated));
   };
 
-  const handleClearAllLeads = async () => {
-    if (!confirm("Are you sure you want to PURGE ALL LEADS and all activity logs? This action will permanently remove all leads for fresh imports!")) return;
+  const handleOpenPurgeModal = () => {
+    setPurgePassword('');
+    setPurgeError('');
+    setIsPurgeModalOpen(true);
+  };
+
+  const handleConfirmPurge = async (e) => {
+    e.preventDefault();
+    setPurgeError('');
+
+    const trimmedEmail = purgeEmail.trim().toLowerCase();
+    const password = purgePassword;
+
+    if (!trimmedEmail || !password) {
+      setPurgeError('Please enter both Admin Email and Password to verify your identity.');
+      return;
+    }
+
+    setIsPurging(true);
 
     try {
+      let isVerified = false;
+
+      // 1. Try Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password: password
+      });
+
+      if (!authError && authData?.user) {
+        isVerified = true;
+      } else {
+        // 2. Admin fallback password verification
+        if (trimmedEmail === 'parhlo.pakistan.edu@gmail.com') {
+          const storedPass = (typeof window !== 'undefined' && window.localStorage.getItem('parhloAdminPassword')) || 'parhlo@2003';
+          if (password === storedPass) {
+            isVerified = true;
+          }
+        }
+        
+        if (!isVerified) {
+          // 3. Public.users table check
+          const { data: dbUser } = await supabase.from('users').select('*').ilike('email', trimmedEmail).single();
+          if (dbUser && (dbUser.role === 'admin' || dbUser.email === 'parhlo.pakistan.edu@gmail.com')) {
+            if (dbUser.password && dbUser.password === password) {
+              isVerified = true;
+            }
+          }
+        }
+      }
+
+      if (!isVerified) {
+        setPurgeError('Security Verification Failed: Invalid Admin Login Email or Password.');
+        setIsPurging(false);
+        return;
+      }
+
+      // Execution of Purge
       await supabase.from('lead_activities').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('leads').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    } catch (e) {}
 
-    setCrmLeads([]);
-    setAllActivities([]);
-    window.localStorage.removeItem('parhlo_leads');
+      setCrmLeads([]);
+      setAllActivities([]);
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem('parhlo_leads');
+      }
+
+      setIsPurgeModalOpen(false);
+      alert('All system leads and activity performance logs have been successfully purged!');
+    } catch (err) {
+      console.error('Error purging leads:', err);
+      setPurgeError('Failed to purge leads: ' + err.message);
+    } finally {
+      setIsPurging(false);
+    }
   };
+
 
   const handleRevokeOffer = async (offerId) => {
     if (!confirm("Are you sure you want to revoke/expire this private offer?")) return;
@@ -930,8 +1003,8 @@ export default function AdminDashboard() {
                 <p className="text-gray-500 mt-1 text-sm">Upload Excel student lead sheets, manage visual pipeline stages, and reassign leads across sales representatives.</p>
               </div>
               <button
-                onClick={handleClearAllLeads}
-                className="bg-rose-600 hover:bg-rose-700 text-white px-5 py-3 rounded-2xl font-black text-xs shadow-md flex items-center gap-2 self-start uppercase tracking-wider"
+                onClick={handleOpenPurgeModal}
+                className="bg-rose-600 hover:bg-rose-700 text-white px-5 py-3 rounded-2xl font-black text-xs shadow-md flex items-center gap-2 self-start uppercase tracking-wider transition-all"
               >
                 <Trash2 size={16} /> Purge All System Leads
               </button>
@@ -2648,6 +2721,99 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* Purge System Leads Confirmation Modal */}
+      {isPurgeModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl border border-rose-100 space-y-6 relative">
+            <button
+              onClick={() => setIsPurgeModalOpen(false)}
+              className="absolute top-6 right-6 text-gray-400 hover:text-gray-600 transition-colors p-2"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-rose-100 pb-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center font-black">
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-900">Purge All System Leads</h3>
+                <p className="text-rose-600 font-bold text-xs">Security Re-authentication Required</p>
+              </div>
+            </div>
+
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 space-y-2 text-xs text-rose-900">
+              <div className="font-black text-sm flex items-center gap-1.5 text-rose-950">
+                <AlertCircle size={18} className="text-rose-600" /> WARNING: PERMANENT DATA PURGE
+              </div>
+              <p className="leading-relaxed font-medium">
+                Are you sure you want to <strong>delete ALL system leads</strong>?
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-rose-800 font-semibold pt-1">
+                <li>All student leads in the database will be permanently deleted.</li>
+                <li>All call logs, WhatsApp records, and performance activities will be reset to zero.</li>
+                <li>This action CANNOT be undone.</li>
+              </ul>
+            </div>
+
+            {purgeError && (
+              <div className="bg-rose-100 border border-rose-300 text-rose-900 p-3.5 rounded-xl text-xs font-bold flex items-center gap-2">
+                <AlertCircle size={16} className="text-rose-600 flex-shrink-0" />
+                <span>{purgeError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmPurge} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Admin Login ID / Email:
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={purgeEmail}
+                  onChange={(e) => setPurgeEmail(e.target.value)}
+                  className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 font-medium text-slate-900"
+                  placeholder="parhlo.pakistan.edu@gmail.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Admin Login Password:
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={purgePassword}
+                  onChange={(e) => setPurgePassword(e.target.value)}
+                  className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 font-medium text-slate-900"
+                  placeholder="Re-enter Admin Password"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsPurgeModalOpen(false)}
+                  className="px-5 py-3 rounded-2xl text-xs font-bold text-gray-600 hover:bg-gray-100 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPurging}
+                  className="px-6 py-3 rounded-2xl text-xs font-black text-white bg-rose-600 hover:bg-rose-700 shadow-lg transition-all disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isPurging ? 'Verifying & Purging...' : 'Confirm & Purge All Leads'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
