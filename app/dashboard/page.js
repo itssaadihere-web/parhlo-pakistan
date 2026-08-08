@@ -40,7 +40,7 @@ export default function StudentDashboard() {
     if (typeof window === 'undefined') return;
     
     const initDashboard = async () => {
-      let email = window.localStorage.getItem('currentUserEmail');
+      let email = (window.localStorage.getItem('currentUserEmail') || '').trim().toLowerCase();
       const isAdmin = window.localStorage.getItem('parhloAdmin') === 'true';
 
       if (isAdmin) {
@@ -52,7 +52,7 @@ export default function StudentDashboard() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session && session.user && session.user.email) {
-          email = session.user.email;
+          email = session.user.email.trim().toLowerCase();
           window.localStorage.setItem('currentUserEmail', email);
           
           if (email === "parhlo.pakistan.edu@gmail.com") {

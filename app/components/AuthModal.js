@@ -124,7 +124,7 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
     const isAdmin = finalRole === 'admin';
     if (typeof window !== 'undefined') {
       window.localStorage.setItem('parhloAdmin', isAdmin ? 'true' : 'false');
-      window.localStorage.setItem('currentUserEmail', email);
+      window.localStorage.setItem('currentUserEmail', lowerEmail);
       window.localStorage.setItem('parhloRole', finalRole);
     }
     
