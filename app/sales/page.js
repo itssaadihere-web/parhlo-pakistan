@@ -244,7 +244,16 @@ export default function SalesDashboard() {
           next_due_date: nextDueDate,
           created_at: new Date().toISOString()
         };
-        await supabase.from('purchases').insert([autoPurchase]);
+        await supabase.from('purchases').upsert([autoPurchase], { onConflict: 'id' });
+
+        if (typeof window !== 'undefined') {
+          try {
+            const localP = JSON.parse(window.localStorage.getItem('parhlo_purchases') || '[]');
+            const filtered = localP.filter(p => !((p.course_slug || '').trim().toLowerCase() === (selectedCourseSlug || '').trim().toLowerCase() && (p.student_email || '').trim().toLowerCase() === studentEmail.trim().toLowerCase()));
+            filtered.push(autoPurchase);
+            window.localStorage.setItem('parhlo_purchases', JSON.stringify(filtered));
+          } catch (e) {}
+        }
       }
     } catch (err) {
       console.warn("DB insert fallback to local storage:", err);

@@ -316,20 +316,32 @@ export default function DynamicCourseDetail() {
         alert("Next installment payment submitted! Admin will review it shortly.");
       } else {
         // New purchase
+        const cleanEmail = (userEmail || window.localStorage.getItem('currentUserEmail') || '').trim().toLowerCase();
+        const newP = {
+          id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'purchase_' + Date.now(),
+          student_email: cleanEmail,
+          course_slug: courseData.slug,
+          status: 'pending',
+          payment_screenshot_url: receiptImage,
+          payment_plan: paymentMode,
+          installments_paid: paymentMode === 'installment' ? 0 : 1,
+          created_at: new Date().toISOString()
+        };
+
         const { error } = await supabase
           .from('purchases')
-          .insert([
-            {
-              student_email: userEmail,
-              course_slug: courseData.slug,
-              status: 'pending',
-              payment_screenshot_url: receiptImage, // Note: In production, upload to Supabase Storage instead of Base64
-              payment_plan: paymentMode,
-              installments_paid: paymentMode === 'installment' ? 0 : 1
-            }
-          ]);
+          .insert([newP]);
   
         if (error) throw error;
+
+        // Local storage fallback for purchases
+        try {
+          const localP = JSON.parse(window.localStorage.getItem('parhlo_purchases') || '[]');
+          const filtered = localP.filter(p => !((p.course_slug || '').trim().toLowerCase() === (courseData.slug || '').trim().toLowerCase() && (p.student_email || '').trim().toLowerCase() === cleanEmail));
+          filtered.push(newP);
+          window.localStorage.setItem('parhlo_purchases', JSON.stringify(filtered));
+        } catch (e) {}
+
         alert("Payment submitted! An admin will review and approve your access shortly.");
       }
 

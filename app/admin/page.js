@@ -407,7 +407,16 @@ export default function AdminDashboard() {
           next_due_date: nextDueDate,
           created_at: new Date().toISOString()
         };
-        await supabase.from('purchases').insert([autoPurchase]);
+        await supabase.from('purchases').upsert([autoPurchase], { onConflict: 'id' });
+
+        if (typeof window !== 'undefined') {
+          try {
+            const localP = JSON.parse(window.localStorage.getItem('parhlo_purchases') || '[]');
+            const filtered = localP.filter(p => !((p.course_slug || '').trim().toLowerCase() === (effectiveSlug || '').trim().toLowerCase() && (p.student_email || '').trim().toLowerCase() === studentEmail.trim().toLowerCase()));
+            filtered.push(autoPurchase);
+            window.localStorage.setItem('parhlo_purchases', JSON.stringify(filtered));
+          } catch (e) {}
+        }
       }
     } catch (err) {
       console.warn("DB insert fallback to local storage:", err);
@@ -633,12 +642,38 @@ export default function AdminDashboard() {
 
     const updatedPayments = payments.map(p => {
       if (p.id === paymentId) {
-        return {
+        const approvedP = {
           ...p,
           status: 'approved',
           installmentsPaid: newInstallmentsPaid,
           nextDueDate: newNextDueDate
         };
+        if (typeof window !== 'undefined') {
+          try {
+            const localP = JSON.parse(window.localStorage.getItem('parhlo_purchases') || '[]');
+            const studentEm = (p.userEmail || '').trim().toLowerCase();
+            const courseSl = (p.courseSlug || '').trim().toLowerCase();
+            const idx = localP.findIndex(lp => (lp.student_email || '').trim().toLowerCase() === studentEm && (lp.course_slug || '').trim().toLowerCase() === courseSl);
+            if (idx !== -1) {
+              localP[idx].status = 'approved';
+              localP[idx].installments_paid = newInstallmentsPaid;
+              localP[idx].next_due_date = newNextDueDate;
+            } else {
+              localP.push({
+                id: p.id,
+                student_email: studentEm,
+                course_slug: courseSl,
+                status: 'approved',
+                payment_plan: p.paymentPlan || 'full',
+                installments_paid: newInstallmentsPaid,
+                next_due_date: newNextDueDate,
+                created_at: new Date().toISOString()
+              });
+            }
+            window.localStorage.setItem('parhlo_purchases', JSON.stringify(localP));
+          } catch (e) {}
+        }
+        return approvedP;
       }
       return p;
     });

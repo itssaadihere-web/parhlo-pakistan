@@ -119,7 +119,7 @@ export default function StudentDashboard() {
           .select('*')
           .ilike('student_email', email.trim());
         if (userPurchases && userPurchases.length > 0) {
-          purchasesList = userPurchases;
+          purchasesList = [...userPurchases];
         }
       } catch (e) {
         console.warn('DB purchases fetch warning:', e);
@@ -131,8 +131,18 @@ export default function StudentDashboard() {
           const localP = JSON.parse(window.localStorage.getItem('parhlo_purchases') || '[]');
           const matched = localP.filter(p => (p.student_email || '').trim().toLowerCase() === email.trim().toLowerCase());
           matched.forEach(mp => {
-            if (!purchasesList.some(p => p.id === mp.id || p.course_slug === mp.course_slug)) {
+            const existingIdx = purchasesList.findIndex(p => 
+              p.id === mp.id || (p.course_slug || '').trim().toLowerCase() === (mp.course_slug || '').trim().toLowerCase()
+            );
+            if (existingIdx === -1) {
               purchasesList.push(mp);
+            } else {
+              // If local storage record has approved status and DB record is pending, override with local approved state
+              const dbSt = (purchasesList[existingIdx].status || '').toLowerCase();
+              const localSt = (mp.status || '').toLowerCase();
+              if (['approved', 'active', 'completed', 'paid'].includes(localSt) && dbSt === 'pending') {
+                purchasesList[existingIdx] = mp;
+              }
             }
           });
         } catch (e) {}
@@ -145,15 +155,27 @@ export default function StudentDashboard() {
           .select('*')
           .ilike('student_email', email.trim());
         
-        let activeOffers = dbOffers || [];
-        if (activeOffers.length === 0 && typeof window !== 'undefined') {
+        let activeOffers = (dbOffers || []).filter(o => !o.status || o.status === 'active');
+        if (typeof window !== 'undefined') {
           const local = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
-          activeOffers = local.filter(o => (o.student_email || '').trim().toLowerCase() === email.trim().toLowerCase());
+          const localActive = local.filter(o => 
+            (o.student_email || '').trim().toLowerCase() === email.trim().toLowerCase() &&
+            (!o.status || o.status === 'active')
+          );
+          localActive.forEach(lo => {
+            if (!activeOffers.some(o => o.id === lo.id)) activeOffers.push(lo);
+          });
         }
 
         for (const offer of activeOffers) {
-          const hasPurchase = purchasesList.some(p => (p.course_slug || '').trim().toLowerCase() === (offer.course_slug || '').trim().toLowerCase());
-          if (!hasPurchase) {
+          const offerSlug = (offer.course_slug || '').trim().toLowerCase();
+          const existingApproved = purchasesList.some(p => {
+            const pSlug = (p.course_slug || '').trim().toLowerCase();
+            const st = (p.status || '').toLowerCase();
+            return pSlug === offerSlug && (['approved', 'active', 'completed', 'paid'].includes(st) || p.payment_plan === 'free_trial');
+          });
+
+          if (!existingApproved) {
             const offerCreated = new Date(offer.created_at || Date.now());
             const nextDueDate = new Date(offerCreated.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
             const autoPurchase = {
@@ -171,25 +193,54 @@ export default function StudentDashboard() {
             };
 
             try {
-              await supabase.from('purchases').insert([autoPurchase]);
+              await supabase.from('purchases').upsert([autoPurchase], { onConflict: 'id' });
             } catch (e) {
-              console.warn('DB auto purchase insert warning:', e);
+              console.warn('DB auto purchase upsert warning:', e);
             }
-            purchasesList.push(autoPurchase);
+
+            // Replace any pending purchase for this course slug with the auto-approved purchase
+            const pIndex = purchasesList.findIndex(p => (p.course_slug || '').trim().toLowerCase() === offerSlug);
+            if (pIndex !== -1) {
+              purchasesList[pIndex] = autoPurchase;
+            } else {
+              purchasesList.push(autoPurchase);
+            }
+
+            // Persist to localStorage for fallback resilience
+            if (typeof window !== 'undefined') {
+              try {
+                const localP = JSON.parse(window.localStorage.getItem('parhlo_purchases') || '[]');
+                const updatedP = localP.filter(p => (p.course_slug || '').trim().toLowerCase() !== offerSlug);
+                updatedP.push(autoPurchase);
+                window.localStorage.setItem('parhlo_purchases', JSON.stringify(updatedP));
+              } catch (e) {}
+            }
           }
         }
       } catch (err) {
         console.error('Error auto-syncing sales offers:', err);
       }
 
-      // Map pending payments
+      const isApprovedStatus = (p) => {
+        const st = (p.status || '').toLowerCase();
+        return (
+          ['approved', 'active', 'completed', 'paid', 'enrolled'].includes(st) ||
+          p.payment_plan === 'free_trial'
+        );
+      };
+
+      // Map pending payments (only for courses that do NOT have an approved purchase)
+      const approvedSlugsSet = new Set(
+        purchasesList.filter(isApprovedStatus).map(p => (p.course_slug || '').trim().toLowerCase())
+      );
+
       const pending = purchasesList
-        .filter(p => p.status === 'pending')
+        .filter(p => (p.status || '').toLowerCase() === 'pending' && !approvedSlugsSet.has((p.course_slug || '').trim().toLowerCase()))
         .map(p => ({
           id: p.id,
           courseName: p.course_slug,
           transactionId: 'N/A',
-          date: new Date(p.created_at).toLocaleDateString(),
+          date: new Date(p.created_at || Date.now()).toLocaleDateString(),
           status: 'pending'
         }));
       setPendingPayments(pending);
@@ -210,8 +261,7 @@ export default function StudentDashboard() {
 
       const uniqueApprovedMap = new Map();
       purchasesList.forEach(p => {
-        const isApp = (p.status || '').toLowerCase() === 'approved' || (p.status || '').toLowerCase() === 'active' || p.payment_plan === 'free_trial';
-        if (isApp && p.course_slug) {
+        if (isApprovedStatus(p) && p.course_slug) {
           const slugKey = p.course_slug.trim().toLowerCase();
           if (!uniqueApprovedMap.has(slugKey)) {
             uniqueApprovedMap.set(slugKey, p);

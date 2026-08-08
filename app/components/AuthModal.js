@@ -167,7 +167,19 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
               next_due_date: nextDueDate,
               created_at: offerCreated.toISOString()
             };
-            await supabase.from('purchases').insert([autoPurchase]);
+            try {
+              await supabase.from('purchases').upsert([autoPurchase], { onConflict: 'id' });
+            } catch (e) {
+              console.warn('Supabase upsert warning:', e);
+            }
+            if (typeof window !== 'undefined') {
+              try {
+                const localP = JSON.parse(window.localStorage.getItem('parhlo_purchases') || '[]');
+                const filtered = localP.filter(p => !((p.course_slug || '').trim().toLowerCase() === (offer.course_slug || '').trim().toLowerCase() && (p.student_email || '').trim().toLowerCase() === lowerEmail));
+                filtered.push(autoPurchase);
+                window.localStorage.setItem('parhlo_purchases', JSON.stringify(filtered));
+              } catch (e) {}
+            }
           }
         }
       } catch (e) {
