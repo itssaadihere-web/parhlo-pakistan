@@ -213,17 +213,19 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
         <button 
           type="button"
           onClick={async () => {
+            const origin = typeof window !== 'undefined' ? window.location.origin : '';
+            const targetUrl = origin ? `${origin}/dashboard` : undefined;
             const { data, error } = await supabase.auth.signInWithOAuth({
               provider: 'google',
               options: {
-                redirectTo: `${window.location.origin}/dashboard`,
+                redirectTo: targetUrl,
                 queryParams: {
                   prompt: 'select_account'
                 }
               }
             });
             if (error) {
-              alert("Backend not configured. Please add Supabase URLs to your project.");
+              alert("Google login error: " + error.message);
             }
           }}
           className="w-full mb-6 flex items-center justify-center gap-3 bg-white border border-gray-200 py-4 rounded-xl font-bold text-gray-700 hover:bg-gray-50 transition-all shadow-sm"
