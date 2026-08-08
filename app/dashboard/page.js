@@ -104,12 +104,31 @@ export default function StudentDashboard() {
       }
 
       // Fetch all purchases for this user from Supabase using case-insensitive ilike
-      const { data: userPurchases, error: purchasesError } = await supabase
-        .from('purchases')
-        .select('*')
-        .ilike('student_email', email.trim());
+      let purchasesList = [];
+      try {
+        const { data: userPurchases } = await supabase
+          .from('purchases')
+          .select('*')
+          .ilike('student_email', email.trim());
+        if (userPurchases && userPurchases.length > 0) {
+          purchasesList = userPurchases;
+        }
+      } catch (e) {
+        console.warn('DB purchases fetch warning:', e);
+      }
 
-      let purchasesList = userPurchases || [];
+      // Local storage fallback for purchases
+      if (typeof window !== 'undefined') {
+        try {
+          const localP = JSON.parse(window.localStorage.getItem('parhlo_purchases') || '[]');
+          const matched = localP.filter(p => (p.student_email || '').trim().toLowerCase() === email.trim().toLowerCase());
+          matched.forEach(mp => {
+            if (!purchasesList.some(p => p.id === mp.id || p.course_slug === mp.course_slug)) {
+              purchasesList.push(mp);
+            }
+          });
+        } catch (e) {}
+      }
 
       // Check if student has active sales offers (e.g. free_month_trial) that need auto-enrollment
       try {
@@ -120,7 +139,7 @@ export default function StudentDashboard() {
           .eq('status', 'active');
         
         let activeOffers = dbOffers || [];
-        if (activeOffers.length === 0) {
+        if (activeOffers.length === 0 && typeof window !== 'undefined') {
           const local = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
           activeOffers = local.filter(o => o.student_email?.toLowerCase() === email.trim().toLowerCase() && (o.status === 'active' || !o.status));
         }
@@ -158,37 +177,40 @@ export default function StudentDashboard() {
         console.error('Error auto-syncing sales offers:', err);
       }
 
-      if (purchasesError) {
-        console.error('Error fetching student purchases:', purchasesError);
-        setPendingPayments([]);
-        setEnrolledCourses([]);
-      } else if (purchasesList) {
-        // Map pending payments
-        const pending = purchasesList
-          .filter(p => p.status === 'pending')
-          .map(p => ({
-            id: p.id,
-            courseName: p.course_slug, // Ideally we join with courses table
-            transactionId: 'N/A',
-            date: new Date(p.created_at).toLocaleDateString(),
-            status: 'pending'
-          }));
-        setPendingPayments(pending);
+      // Map pending payments
+      const pending = purchasesList
+        .filter(p => p.status === 'pending')
+        .map(p => ({
+          id: p.id,
+          courseName: p.course_slug,
+          transactionId: 'N/A',
+          date: new Date(p.created_at).toLocaleDateString(),
+          status: 'pending'
+        }));
+      setPendingPayments(pending);
 
-        // Fetch all courses to match with approved purchases
-        const { data: adminCourses, error: coursesError } = await supabase
-          .from('courses')
-          .select('*');
+      // Fetch all courses to match with approved purchases
+      const DEFAULT_COURSES = [
+        { id: 'mathematics-smart-pro', name: 'Mathematics Smart Pro (Class 9)', slug: 'mathematics-smart-pro', category: 'Mathematics', price: 'Rs. 9,999' },
+        { id: 'mathematics-smart-lite', name: 'Mathematics Smart Lite (Class 9)', slug: 'mathematics-smart-lite', category: 'Mathematics', price: 'Rs. 7,140' },
+        { id: 'biology-smart-pro', name: 'Biology Smart Pro (Class 9)', slug: 'biology-smart-pro', category: 'Biology', price: 'Rs. 9,999' },
+        { id: 'chemistry-smart-pro', name: 'Chemistry Smart Pro (Class 9)', slug: 'chemistry-smart-pro', category: 'Chemistry', price: 'Rs. 9,999' },
+        { id: 'physics-smart-pro', name: 'Physics Smart Pro (Class 9)', slug: 'physics-smart-pro', category: 'Physics', price: 'Rs. 9,999' },
+        { id: 'computer-science-smart-pro-class-9', name: 'Computer Science Smart Pro (Class 9)', slug: 'computer-science-smart-pro-class-9', category: 'Computer Science', price: 'Rs. 7,499' },
+        { id: 'english-smart-pro', name: 'English Smart Pro (Class 9)', slug: 'english-smart-pro', category: 'English', price: 'Rs. 7,499' }
+      ];
 
-        if (!coursesError && adminCourses) {
-          const approved = purchasesList.filter(p => p.status === 'approved');
-          let totalStudySecondsAll = 0;
+      const { data: dbCourses } = await supabase.from('courses').select('*');
+      const adminCourses = dbCourses && dbCourses.length > 0 ? dbCourses : DEFAULT_COURSES;
 
-          const activeCourses = approved.map(purchase => {
-            const course = adminCourses.find(c => 
-              (c.slug || '').trim().toLowerCase() === (purchase.course_slug || '').trim().toLowerCase()
-            );
-            if (!course) return null;
+      const approved = purchasesList.filter(p => p.status === 'approved');
+      let totalStudySecondsAll = 0;
+
+      const activeCourses = approved.map(purchase => {
+        const course = adminCourses.find(c => 
+          (c.slug || '').trim().toLowerCase() === (purchase.course_slug || '').trim().toLowerCase()
+        ) || DEFAULT_COURSES.find(c => (c.slug || '').trim().toLowerCase() === (purchase.course_slug || '').trim().toLowerCase());
+        if (!course) return null;
             
             // Read watched time per lecture from localStorage
             const key = `parhlo_watch_${email}_${course.slug}`;
@@ -244,6 +266,13 @@ export default function StudentDashboard() {
             const weeklyLimitSeconds = Math.round(estimatedTotalSeconds / 12);
             const oneMonthFreeLimitSeconds = Math.round(estimatedTotalSeconds / 3);
 
+            const isFreeTrial = purchase.payment_plan === 'free_trial';
+            const rawPrice = parsePrice(course.price);
+            const totalCoursePrice = purchase.total_price || rawPrice;
+            const monthlyInst = purchase.monthly_installment_amount || Math.round(totalCoursePrice / 3);
+            const amountPaid = purchase.amount_paid || 0;
+            const remainingReceivable = isFreeTrial ? totalCoursePrice : Math.max(0, totalCoursePrice - amountPaid);
+
             return {
               id: purchase.id,
               title: course.name,
@@ -270,9 +299,7 @@ export default function StudentDashboard() {
 
           setEnrolledCourses(activeCourses);
           setTotalStudyHours((totalStudySecondsAll / 3600).toFixed(1));
-        }
-      }
-    };
+      };
 
     initDashboard();
   }, []);
