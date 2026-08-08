@@ -107,8 +107,25 @@ export default function DynamicCourseDetail() {
           .ilike('student_email', cleanEmail)
           .eq('course_slug', slug);
 
-        const purchase = purchases && purchases.length > 0 
-          ? (purchases.find(p => p.status === 'approved') || purchases[0])
+        let purchasesList = purchases && purchases.length > 0 ? [...purchases] : [];
+
+        if (typeof window !== 'undefined') {
+          try {
+            const localP = JSON.parse(window.localStorage.getItem('parhlo_purchases') || '[]');
+            const matched = localP.filter(p => 
+              (p.student_email || '').trim().toLowerCase() === cleanEmail &&
+              (p.course_slug || '').trim().toLowerCase() === (slug || '').trim().toLowerCase()
+            );
+            matched.forEach(mp => {
+              if (!purchasesList.some(p => p.id === mp.id)) {
+                purchasesList.push(mp);
+              }
+            });
+          } catch (e) {}
+        }
+
+        const purchase = purchasesList.length > 0 
+          ? (purchasesList.find(p => (p.status || '').toLowerCase() === 'approved' || (p.status || '').toLowerCase() === 'active') || purchasesList[0])
           : null;
 
         if (purchase) {

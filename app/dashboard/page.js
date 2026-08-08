@@ -259,16 +259,23 @@ export default function StudentDashboard() {
       const { data: dbCourses } = await supabase.from('courses').select('*');
       const adminCourses = dbCourses && dbCourses.length > 0 ? dbCourses : DEFAULT_COURSES;
 
-      const uniqueApprovedMap = new Map();
+      const uniqueCoursesMap = new Map();
       purchasesList.forEach(p => {
-        if (isApprovedStatus(p) && p.course_slug) {
+        const st = (p.status || '').toLowerCase();
+        if (st !== 'suspended' && st !== 'cancelled' && st !== 'rejected' && p.course_slug) {
           const slugKey = p.course_slug.trim().toLowerCase();
-          if (!uniqueApprovedMap.has(slugKey)) {
-            uniqueApprovedMap.set(slugKey, p);
+          const existing = uniqueCoursesMap.get(slugKey);
+          if (!existing) {
+            uniqueCoursesMap.set(slugKey, p);
+          } else {
+            const existingSt = (existing.status || '').toLowerCase();
+            if (existingSt === 'pending' && st !== 'pending') {
+              uniqueCoursesMap.set(slugKey, p);
+            }
           }
         }
       });
-      const approved = Array.from(uniqueApprovedMap.values());
+      const approved = Array.from(uniqueCoursesMap.values());
       let totalStudySecondsAll = 0;
 
       const activeCourses = approved.map(purchase => {
@@ -339,6 +346,7 @@ export default function StudentDashboard() {
             const oneMonthFreeLimitSeconds = Math.round(estimatedTotalSeconds / 3);
 
             const isFreeTrial = purchase.payment_plan === 'free_trial';
+            const isPending = (purchase.status || '').toLowerCase() === 'pending';
             const rawPrice = parsePrice(course.price);
             const totalCoursePrice = purchase.total_price || rawPrice;
             const monthlyInst = purchase.monthly_installment_amount || Math.round(totalCoursePrice / 3);
@@ -360,6 +368,8 @@ export default function StudentDashboard() {
               oneMonthFreeLimitSeconds: oneMonthFreeLimitSeconds,
               paymentPlan: purchase.payment_plan || 'full',
               isFreeTrial: isFreeTrial,
+              isPending: isPending,
+              status: purchase.status || 'approved',
               totalCoursePrice: totalCoursePrice,
               monthlyInstallment: monthlyInst,
               amountPaid: amountPaid,
@@ -685,8 +695,17 @@ export default function StudentDashboard() {
                        <PlayCircle size={48} className="text-white opacity-40 group-hover:scale-110 transition-transform relative z-10" />
                     </div>
                     <div className="p-8">
-                      <span className="text-[10px] uppercase font-black text-gray-400 tracking-widest">{course.category}</span>
-                      <h3 className="text-xl font-black text-gray-900 mt-2 mb-6 h-14 line-clamp-2">{course.title}</h3>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-[10px] uppercase font-black text-gray-400 tracking-widest">{course.category}</span>
+                        {course.isPending ? (
+                          <span className="bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-200">Pending Approval</span>
+                        ) : course.isFreeTrial ? (
+                          <span className="bg-purple-100 text-purple-800 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-purple-200">1-Month Free</span>
+                        ) : (
+                          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-emerald-200">Active</span>
+                        )}
+                      </div>
+                      <h3 className="text-xl font-black text-gray-900 mb-6 h-14 line-clamp-2">{course.title}</h3>
                       
                       <div className="w-full bg-gray-100 rounded-full h-2 mb-2 overflow-hidden">
                         <div className="bg-green-500 h-2 rounded-full" style={{ width: `${course.progress}%` }}></div>
@@ -698,7 +717,7 @@ export default function StudentDashboard() {
 
                       <Link href={`/courses/${course.slug}`}>
                         <button className="w-full bg-gray-50 text-gray-900 py-3 rounded-xl font-black text-sm hover:bg-green-600 hover:text-white transition-all">
-                          Continue Learning
+                          {course.isPending ? 'View Subject Details' : 'Continue Learning'}
                         </button>
                       </Link>
                     </div>
