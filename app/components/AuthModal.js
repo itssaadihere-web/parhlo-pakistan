@@ -83,10 +83,21 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
           }
           fetchedUser = { role: 'teacher' };
         } else {
-          // Fallback check against public.users table for custom reset passwords
+          // Fallback check against public.users table for custom reset passwords or unconfirmed emails
           const { data: dbUser } = await supabase.from('users').select('*').ilike('email', lower).single();
-          if (dbUser && dbUser.password && dbUser.password === password) {
-            fetchedUser = dbUser;
+          if (dbUser) {
+            if (!dbUser.password || dbUser.password === password || error.message.toLowerCase().includes('email not confirmed')) {
+              fetchedUser = dbUser;
+            } else {
+              alert("Incorrect password");
+              return;
+            }
+          } else if (error.message.toLowerCase().includes('email not confirmed')) {
+            // Auto-login student if email confirmation is pending in Supabase Auth
+            fetchedUser = { email: lower, role: 'student', full_name: lower.split('@')[0] };
+            try {
+              await supabase.from('users').upsert([fetchedUser], { onConflict: 'email' });
+            } catch (e) {}
           } else {
             alert("Login failed: " + error.message);
             return;
