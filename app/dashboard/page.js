@@ -201,14 +201,25 @@ export default function StudentDashboard() {
       const { data: dbCourses } = await supabase.from('courses').select('*');
       const adminCourses = dbCourses && dbCourses.length > 0 ? dbCourses : DEFAULT_COURSES;
 
-      const approved = purchasesList.filter(p => p.status === 'approved');
+      const approved = purchasesList.filter(p => 
+        (p.status || '').toLowerCase() === 'approved' || 
+        (p.status || '').toLowerCase() === 'active' || 
+        p.payment_plan === 'free_trial'
+      );
       let totalStudySecondsAll = 0;
 
       const activeCourses = approved.map(purchase => {
         const course = adminCourses.find(c => 
           (c.slug || '').trim().toLowerCase() === (purchase.course_slug || '').trim().toLowerCase()
-        ) || DEFAULT_COURSES.find(c => (c.slug || '').trim().toLowerCase() === (purchase.course_slug || '').trim().toLowerCase());
-        if (!course) return null;
+        ) || DEFAULT_COURSES.find(c => 
+          (c.slug || '').trim().toLowerCase() === (purchase.course_slug || '').trim().toLowerCase()
+        ) || {
+          id: purchase.course_slug,
+          name: (purchase.course_slug || 'Course').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          slug: purchase.course_slug,
+          category: 'Class 9',
+          price: 'Rs. 9,999'
+        };
             
             // Read watched time per lecture from localStorage
             const key = `parhlo_watch_${email}_${course.slug}`;
