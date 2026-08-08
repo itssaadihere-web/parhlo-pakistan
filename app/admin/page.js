@@ -392,6 +392,23 @@ export default function AdminDashboard() {
 
     try {
       await supabase.from('sales_offers').insert([newOffer]);
+      if (offerType === 'free_month_trial') {
+        const nextDueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        const autoPurchase = {
+          id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'purchase_' + Date.now(),
+          student_email: studentEmail.trim().toLowerCase(),
+          course_slug: effectiveSlug,
+          status: 'approved',
+          payment_plan: 'free_trial',
+          amount_paid: 0,
+          total_price: calculatedDiscountedPrice,
+          monthly_installment_amount: calculatedMonthlyInstallment,
+          offer_id: newOffer.id,
+          next_due_date: nextDueDate,
+          created_at: new Date().toISOString()
+        };
+        await supabase.from('purchases').insert([autoPurchase]);
+      }
     } catch (err) {
       console.warn("DB insert fallback to local storage:", err);
     }

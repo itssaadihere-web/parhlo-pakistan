@@ -109,13 +109,62 @@ export default function StudentDashboard() {
         .select('*')
         .eq('student_email', email);
 
+      let purchasesList = userPurchases || [];
+
+      // Check if student has active sales offers (e.g. free_month_trial) that need auto-enrollment
+      try {
+        const { data: dbOffers } = await supabase
+          .from('sales_offers')
+          .select('*')
+          .ilike('student_email', email)
+          .eq('status', 'active');
+        
+        let activeOffers = dbOffers || [];
+        if (activeOffers.length === 0) {
+          const local = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
+          activeOffers = local.filter(o => o.student_email?.toLowerCase() === email.toLowerCase() && (o.status === 'active' || !o.status));
+        }
+
+        for (const offer of activeOffers) {
+          if (offer.offer_type === 'free_month_trial') {
+            const hasPurchase = purchasesList.some(p => p.course_slug === offer.course_slug);
+            if (!hasPurchase) {
+              const offerCreated = new Date(offer.created_at || Date.now());
+              const nextDueDate = new Date(offerCreated.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+              const autoPurchase = {
+                id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'purchase_' + Date.now(),
+                student_email: email,
+                course_slug: offer.course_slug,
+                status: 'approved',
+                payment_plan: 'free_trial',
+                amount_paid: 0,
+                total_price: offer.custom_total_price || 0,
+                monthly_installment_amount: offer.custom_installment_amount || 0,
+                offer_id: offer.id,
+                next_due_date: nextDueDate,
+                created_at: offerCreated.toISOString()
+              };
+
+              try {
+                await supabase.from('purchases').insert([autoPurchase]);
+              } catch (e) {
+                console.warn('DB auto purchase insert warning:', e);
+              }
+              purchasesList.push(autoPurchase);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error auto-syncing sales offers:', err);
+      }
+
       if (purchasesError) {
         console.error('Error fetching student purchases:', purchasesError);
         setPendingPayments([]);
         setEnrolledCourses([]);
-      } else if (userPurchases) {
+      } else if (purchasesList) {
         // Map pending payments
-        const pending = userPurchases
+        const pending = purchasesList
           .filter(p => p.status === 'pending')
           .map(p => ({
             id: p.id,
@@ -132,7 +181,7 @@ export default function StudentDashboard() {
           .select('*');
 
         if (!coursesError && adminCourses) {
-          const approved = userPurchases.filter(p => p.status === 'approved');
+          const approved = purchasesList.filter(p => p.status === 'approved');
           let totalStudySecondsAll = 0;
 
           const activeCourses = approved.map(purchase => {
