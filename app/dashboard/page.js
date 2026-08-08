@@ -130,18 +130,17 @@ export default function StudentDashboard() {
         } catch (e) {}
       }
 
-      // Check if student has active sales offers (e.g. free_month_trial) that need auto-enrollment
+      // Check if student has any sales offers issued by sales rep (e.g. free_month_trial, added_discount)
       try {
         const { data: dbOffers } = await supabase
           .from('sales_offers')
           .select('*')
-          .ilike('student_email', email.trim())
-          .eq('status', 'active');
+          .ilike('student_email', email.trim());
         
         let activeOffers = dbOffers || [];
         if (activeOffers.length === 0 && typeof window !== 'undefined') {
           const local = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
-          activeOffers = local.filter(o => o.student_email?.toLowerCase() === email.trim().toLowerCase() && (o.status === 'active' || !o.status));
+          activeOffers = local.filter(o => (o.student_email || '').trim().toLowerCase() === email.trim().toLowerCase());
         }
 
         for (const offer of activeOffers) {
@@ -311,6 +310,13 @@ export default function StudentDashboard() {
       };
 
     initDashboard();
+
+    window.addEventListener('focus', initDashboard);
+    window.addEventListener('storage', initDashboard);
+    return () => {
+      window.removeEventListener('focus', initDashboard);
+      window.removeEventListener('storage', initDashboard);
+    };
   }, []);
 
   const handleLogout = async () => {
