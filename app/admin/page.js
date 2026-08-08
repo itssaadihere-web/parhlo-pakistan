@@ -29,7 +29,15 @@ import {
   TrendingUp,
   Phone,
   MessageSquare,
-  History
+  History,
+  Gift,
+  Percent,
+  Copy,
+  PlusCircle,
+  Sparkles,
+  AlertCircle,
+  Filter,
+  Check
 } from 'lucide-react';
 
 import { supabase } from '@/utils/supabase';
@@ -75,6 +83,23 @@ export default function AdminDashboard() {
   const [newSalesRep, setNewSalesRep] = useState({ name: '', email: '', password: '' });
   const [salesRepMsg, setSalesRepMsg] = useState('');
   const [bulkAssignTarget, setBulkAssignTarget] = useState('round_robin');
+
+  // Private Offers State
+  const [salesOffers, setSalesOffers] = useState([]);
+  const [offerSearch, setOfferSearch] = useState('');
+  const [offerRepFilter, setOfferRepFilter] = useState('all');
+  const [offerStatusFilter, setOfferStatusFilter] = useState('all');
+  const [offerTypeFilter, setOfferTypeFilter] = useState('all');
+  const [isCreateOfferModalOpen, setIsCreateOfferModalOpen] = useState(false);
+  const [newOfferData, setNewOfferData] = useState({
+    studentEmail: '',
+    courseSlug: '',
+    offerType: 'added_discount',
+    discountPercent: '5',
+    customInstallment: ''
+  });
+  const [offerFormMsg, setOfferFormMsg] = useState({ type: '', text: '' });
+  const [copiedOfferId, setCopiedOfferId] = useState(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -225,6 +250,35 @@ export default function AdminDashboard() {
     } catch (e) {}
     setAllActivities(fetchedActivities);
 
+    // Fetch Private Sales Offers
+    let fetchedOffers = [];
+    try {
+      const { data: dbOffers, error: offerErr } = await supabase
+        .from('sales_offers')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!offerErr && dbOffers) {
+        fetchedOffers = dbOffers;
+      } else {
+        const local = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
+        fetchedOffers = local;
+      }
+    } catch (e) {
+      const local = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
+      fetchedOffers = local;
+    }
+
+    const localOffers = JSON.parse(typeof window !== 'undefined' ? window.localStorage.getItem('parhlo_sales_offers') || '[]' : '[]');
+    const combinedOffersMap = new Map();
+    fetchedOffers.forEach(o => combinedOffersMap.set(o.id, o));
+    localOffers.forEach(o => {
+      if (!combinedOffersMap.has(o.id)) {
+        combinedOffersMap.set(o.id, o);
+      }
+    });
+    const finalOffers = Array.from(combinedOffersMap.values()).sort((a, b) => new Date(b.created_at || Date.now()) - new Date(a.created_at || Date.now()));
+    setSalesOffers(finalOffers);
+
     setLoading(false);
   };
 
@@ -258,8 +312,136 @@ export default function AdminDashboard() {
     setCrmLeads([]);
     setAllActivities([]);
     window.localStorage.removeItem('parhlo_leads');
-    alert("All system leads and activity logs have been successfully purged!");
   };
+
+  const handleRevokeOffer = async (offerId) => {
+    if (!confirm("Are you sure you want to revoke/expire this private offer?")) return;
+    try {
+      await supabase.from('sales_offers').update({ status: 'expired', updated_at: new Date().toISOString() }).eq('id', offerId);
+    } catch (e) {}
+
+    const updated = salesOffers.map(o => o.id === offerId ? { ...o, status: 'expired' } : o);
+    setSalesOffers(updated);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('parhlo_sales_offers', JSON.stringify(updated));
+    }
+  };
+
+  const handleDeleteOffer = async (offerId) => {
+    if (!confirm("Are you sure you want to PERMANENTLY DELETE this offer record?")) return;
+    try {
+      await supabase.from('sales_offers').delete().eq('id', offerId);
+    } catch (e) {}
+
+    const updated = salesOffers.filter(o => o.id !== offerId);
+    setSalesOffers(updated);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('parhlo_sales_offers', JSON.stringify(updated));
+    }
+  };
+
+  const handleCreateAdminOffer = async (e) => {
+    e.preventDefault();
+    setOfferFormMsg({ type: '', text: '' });
+
+    const { studentEmail, courseSlug, offerType, discountPercent, customInstallment } = newOfferData;
+
+    if (!studentEmail.trim() || !studentEmail.includes('@')) {
+      setOfferFormMsg({ type: 'error', text: 'Please enter a valid student email address.' });
+      return;
+    }
+
+    const effectiveSlug = courseSlug || adminCourses[0]?.slug;
+    if (!effectiveSlug) {
+      setOfferFormMsg({ type: 'error', text: 'Please select a valid course.' });
+      return;
+    }
+
+    const selectedCourse = adminCourses.find(c => c.slug === effectiveSlug);
+    const rawPrice = selectedCourse ? parsePrice(selectedCourse.price) : 0;
+    const standardDiscount = selectedCourse ? (parseFloat(String(selectedCourse.discount || '0').replace(/[^0-9.]/g, '')) || 0) : 0;
+    const basePrice = standardDiscount > 0 ? Math.round(rawPrice * (1 - standardDiscount / 100)) : rawPrice;
+
+    let calculatedDiscountedPrice = basePrice;
+    let calculatedMonthlyInstallment = Math.round(basePrice / 3);
+
+    if (offerType === 'added_discount') {
+      const extraDisc = parseFloat(discountPercent) || 0;
+      calculatedDiscountedPrice = Math.max(0, Math.round(basePrice * (1 - extraDisc / 100)));
+      calculatedMonthlyInstallment = Math.round(calculatedDiscountedPrice / 3);
+    } else if (offerType === 'free_month_trial') {
+      calculatedDiscountedPrice = basePrice;
+      calculatedMonthlyInstallment = Math.round(basePrice / 3);
+    } else if (offerType === 'discounted_installment') {
+      calculatedMonthlyInstallment = parseFloat(customInstallment) || Math.round(basePrice / 3);
+      calculatedDiscountedPrice = calculatedMonthlyInstallment * 3;
+    }
+
+    const newOffer = {
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'offer_' + Date.now(),
+      sales_email: 'admin@parhlopakistan.com.pk (Admin)',
+      student_email: studentEmail.trim().toLowerCase(),
+      course_slug: effectiveSlug,
+      offer_type: offerType,
+      discount_percent: offerType === 'added_discount' ? parseFloat(discountPercent) || 0 : 0,
+      custom_installment_amount: offerType === 'discounted_installment' ? calculatedMonthlyInstallment : 0,
+      custom_total_price: calculatedDiscountedPrice,
+      status: 'active',
+      created_at: new Date().toISOString()
+    };
+
+    try {
+      await supabase.from('sales_offers').insert([newOffer]);
+    } catch (err) {
+      console.warn("DB insert fallback to local storage:", err);
+    }
+
+    const updatedLocal = [newOffer, ...salesOffers];
+    setSalesOffers(updatedLocal);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('parhlo_sales_offers', JSON.stringify(updatedLocal));
+    }
+
+    setOfferFormMsg({
+      type: 'success',
+      text: `Private offer successfully issued to ${studentEmail}!`
+    });
+
+    setTimeout(() => {
+      setIsCreateOfferModalOpen(false);
+      setOfferFormMsg({ type: '', text: '' });
+      setNewOfferData({
+        studentEmail: '',
+        courseSlug: adminCourses[0]?.slug || '',
+        offerType: 'added_discount',
+        discountPercent: '5',
+        customInstallment: ''
+      });
+    }, 1200);
+  };
+
+  const filteredOffers = salesOffers.filter(offer => {
+    const matchesSearch =
+      !offerSearch ||
+      offer.student_email?.toLowerCase().includes(offerSearch.toLowerCase()) ||
+      offer.course_slug?.toLowerCase().includes(offerSearch.toLowerCase()) ||
+      offer.sales_email?.toLowerCase().includes(offerSearch.toLowerCase());
+
+    const matchesRep =
+      offerRepFilter === 'all' ||
+      (offerRepFilter === 'admin'
+        ? offer.sales_email?.toLowerCase().includes('admin')
+        : offer.sales_email?.toLowerCase() === offerRepFilter.toLowerCase());
+
+    const matchesStatus =
+      offerStatusFilter === 'all' ||
+      (offerStatusFilter === 'active' ? (offer.status === 'active' || !offer.status) : offer.status === offerStatusFilter);
+
+    const matchesType =
+      offerTypeFilter === 'all' || offer.offer_type === offerTypeFilter;
+
+    return matchesSearch && matchesRep && matchesStatus && matchesType;
+  });
 
   const handleBulkAssignUnassigned = async () => {
     const unassignedLeads = crmLeads.filter(l => !l.assigned_to);
@@ -1123,29 +1305,343 @@ export default function AdminDashboard() {
         )}
 
         {adminTab === 'sales' && (
-          <div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <div className="space-y-8">
+            {/* Top Bar Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h1 className="text-3xl font-black text-slate-900">Sales & Private Offers</h1>
-                <p className="text-gray-500 mt-1">Manage private student discounts generated by Sales Reps (Faiz & Nabiha) and Admin.</p>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-3xl font-black text-slate-900">Sales & Private Offers</h1>
+                  <span className="bg-emerald-100 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold">
+                    {salesOffers.length} Total Issued
+                  </span>
+                </div>
+                <p className="text-gray-500 mt-1">
+                  Audit trail and control panel for private student discounts generated by Sales Reps (Faiz & Nabiha) and Admin.
+                </p>
               </div>
-              <Link
-                href="/sales"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl font-black text-sm shadow-lg flex items-center gap-2 self-start"
-              >
-                <Tag size={18} /> Open Sales Portal
-              </Link>
+              <div className="flex items-center gap-3 self-start sm:self-auto">
+                <button
+                  onClick={() => {
+                    setNewOfferData(prev => ({ ...prev, courseSlug: adminCourses[0]?.slug || '' }));
+                    setIsCreateOfferModalOpen(true);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-2xl font-black text-sm shadow-lg flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <PlusCircle size={18} /> Issue Admin Private Offer
+                </button>
+                <Link
+                  href="/sales"
+                  target="_blank"
+                  className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 rounded-2xl font-black text-sm shadow-md flex items-center gap-2 transition-all"
+                >
+                  <Tag size={18} /> Open Sales Portal
+                </Link>
+              </div>
             </div>
 
-            <div className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm space-y-6">
-              <div className="flex items-center gap-4 bg-emerald-50 border border-emerald-200 p-6 rounded-2xl">
+            {/* Metric Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white border border-gray-100 p-6 rounded-3xl shadow-sm flex items-center gap-4">
+                <div className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl">
+                  <Tag size={28} />
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Total Offers</p>
+                  <h3 className="text-2xl font-black text-slate-900">{salesOffers.length}</h3>
+                  <p className="text-[11px] text-gray-500 font-medium">Issued across all channels</p>
+                </div>
+              </div>
+
+              <div className="bg-white border border-gray-100 p-6 rounded-3xl shadow-sm flex items-center gap-4">
+                <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl">
+                  <Sparkles size={28} />
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Active Offers</p>
+                  <h3 className="text-2xl font-black text-blue-600">
+                    {salesOffers.filter(o => o.status === 'active' || !o.status).length}
+                  </h3>
+                  <p className="text-[11px] text-gray-500 font-medium">Ready for student checkout</p>
+                </div>
+              </div>
+
+              <div className="bg-white border border-gray-100 p-6 rounded-3xl shadow-sm flex items-center gap-4">
+                <div className="p-4 bg-purple-50 text-purple-600 rounded-2xl">
+                  <Gift size={28} />
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Redeemed Offers</p>
+                  <h3 className="text-2xl font-black text-purple-600">
+                    {salesOffers.filter(o => o.status === 'redeemed').length}
+                  </h3>
+                  <p className="text-[11px] text-gray-500 font-medium">Converted into enrollments</p>
+                </div>
+              </div>
+
+              <div className="bg-white border border-gray-100 p-6 rounded-3xl shadow-sm flex items-center gap-4">
+                <div className="p-4 bg-amber-50 text-amber-600 rounded-2xl">
+                  <Percent size={28} />
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Active Issuers</p>
+                  <h3 className="text-2xl font-black text-amber-600">
+                    {Array.from(new Set(salesOffers.map(o => o.sales_email?.toLowerCase()))).filter(Boolean).length} Issuers
+                  </h3>
+                  <p className="text-[11px] text-gray-500 font-medium">Faiz Ali, Nabiha & Admin</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Sales Team Discount Controls Info Card */}
+            <div className="bg-white rounded-[2.5rem] border border-gray-100 p-6 shadow-sm">
+              <div className="flex items-center gap-4 bg-emerald-50 border border-emerald-200 p-5 rounded-2xl">
                 <div className="p-3 bg-emerald-600 text-white rounded-xl"><Tag size={24} /></div>
                 <div>
-                  <h3 className="font-bold text-emerald-950">Sales Team Discount Controls</h3>
-                  <p className="text-xs text-emerald-800 mt-1">
-                    Sales Representatives (faiz.ali@parhlopakistan.com.pk & Nabiha.Irfan@parhlopakistan.com.pk) can issue private 5% discounts, 1-Month Free Access (delayed 1st installment), or custom installment plans. Admin has no discount limits.
+                  <h3 className="font-bold text-emerald-950 text-sm">Sales Team Policy & Limits</h3>
+                  <p className="text-xs text-emerald-800 mt-0.5">
+                    Authorized Sales Representatives (Faiz Ali & Nabiha Irfan) can issue up to 5% added discount, 1-Month Free Access (delayed 1st installment), or custom installment rates. Admin can issue custom discounts without limits.
                   </p>
                 </div>
+              </div>
+            </div>
+
+            {/* Search & Filter Bar */}
+            <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4">
+              <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+                {/* Search */}
+                <div className="relative flex-1">
+                  <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={offerSearch}
+                    onChange={(e) => setOfferSearch(e.target.value)}
+                    placeholder="Search by student email, course, or sales rep..."
+                    className="w-full pl-11 pr-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Rep Filter */}
+                  <select
+                    value={offerRepFilter}
+                    onChange={(e) => setOfferRepFilter(e.target.value)}
+                    className="px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="all">All Sales Issuers (Who)</option>
+                    <option value="faiz.ali@parhlopakistan.com.pk">Faiz Ali</option>
+                    <option value="nabiha.irfan@parhlopakistan.com.pk">Nabiha Irfan</option>
+                    <option value="admin">Admin Issued Only</option>
+                  </select>
+
+                  {/* Status Filter */}
+                  <select
+                    value={offerStatusFilter}
+                    onChange={(e) => setOfferStatusFilter(e.target.value)}
+                    className="px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="active">Active Only</option>
+                    <option value="redeemed">Redeemed Only</option>
+                    <option value="expired">Expired / Revoked</option>
+                  </select>
+
+                  {/* Type Filter */}
+                  <select
+                    value={offerTypeFilter}
+                    onChange={(e) => setOfferTypeFilter(e.target.value)}
+                    className="px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="all">All Offer Types (How)</option>
+                    <option value="added_discount">Added Discount (%)</option>
+                    <option value="free_month_trial">1-Month Free Access</option>
+                    <option value="discounted_installment">Discounted Installment</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Main Detailed Offers Table: Whom, Which, Who, When, How Issued */}
+              <div className="overflow-x-auto pt-2">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-[11px] uppercase font-black text-gray-400 bg-gray-50/50">
+                      <th className="py-3.5 px-4 rounded-l-xl">WHOM (Student Recipient)</th>
+                      <th className="py-3.5 px-4">WHICH (Course Target)</th>
+                      <th className="py-3.5 px-4">WHO (Issued By)</th>
+                      <th className="py-3.5 px-4">WHEN (Date & Time)</th>
+                      <th className="py-3.5 px-4">HOW ISSUED (Offer Details)</th>
+                      <th className="py-3.5 px-4 text-center">STATUS</th>
+                      <th className="py-3.5 px-4 text-right rounded-r-xl">ACTIONS</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 font-medium">
+                    {filteredOffers.map((offer) => {
+                      const matchedCourse = adminCourses.find(c => c.slug === offer.course_slug);
+                      const courseTitle = matchedCourse ? matchedCourse.name : offer.course_slug;
+                      const rawPrice = matchedCourse ? parsePrice(matchedCourse.price) : 0;
+                      
+                      const isFaiz = offer.sales_email?.toLowerCase().includes('faiz');
+                      const isNabiha = offer.sales_email?.toLowerCase().includes('nabiha');
+                      const isAdminIssuer = offer.sales_email?.toLowerCase().includes('admin');
+
+                      const issuerName = isFaiz ? 'Faiz Ali' : isNabiha ? 'Nabiha Irfan' : isAdminIssuer ? 'Admin Portal' : offer.sales_email;
+
+                      const createdDate = new Date(offer.created_at || Date.now());
+                      const dateFormatted = createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                      const timeFormatted = createdDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+                      return (
+                        <tr key={offer.id} className="hover:bg-gray-50/80 transition-colors">
+                          {/* WHOM */}
+                          <td className="py-4 px-4">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 font-black text-xs flex items-center justify-center shrink-0">
+                                {offer.student_email.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <span className="font-bold text-slate-900 block font-mono text-xs">{offer.student_email}</span>
+                                {students.some(s => s.email?.toLowerCase() === offer.student_email?.toLowerCase()) ? (
+                                  <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">Enrolled Student</span>
+                                ) : (
+                                  <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded">Prospect Lead</span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* WHICH */}
+                          <td className="py-4 px-4">
+                            <div>
+                              <span className="font-bold text-slate-900 block text-xs">{courseTitle}</span>
+                              <span className="text-[11px] text-gray-500 font-mono">
+                                Base: {formatCurrency(rawPrice)}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* WHO */}
+                          <td className="py-4 px-4">
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
+                                isFaiz ? 'bg-blue-100 text-blue-800' : isNabiha ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-800'
+                              }`}>
+                                <User size={12} />
+                                {issuerName}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-gray-400 block font-mono mt-0.5">{offer.sales_email}</span>
+                          </td>
+
+                          {/* WHEN */}
+                          <td className="py-4 px-4">
+                            <div className="text-xs">
+                              <span className="font-bold text-slate-900 block">{dateFormatted}</span>
+                              <span className="text-gray-400 font-mono text-[11px] block">{timeFormatted}</span>
+                            </div>
+                          </td>
+
+                          {/* HOW ISSUED */}
+                          <td className="py-4 px-4">
+                            <div className="space-y-1">
+                              {offer.offer_type === 'added_discount' && (
+                                <div>
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-black text-xs">
+                                    <Percent size={12} /> {offer.discount_percent}% Extra Discount
+                                  </span>
+                                  <span className="block text-xs font-bold text-slate-800 mt-0.5">
+                                    Offer Price: <span className="text-emerald-600 font-black">{formatCurrency(offer.custom_total_price)}</span>
+                                  </span>
+                                </div>
+                              )}
+
+                              {offer.offer_type === 'free_month_trial' && (
+                                <div>
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-black text-xs">
+                                    <Gift size={12} /> 1-Month Free Access
+                                  </span>
+                                  <span className="block text-[11px] text-gray-500 font-medium mt-0.5">
+                                    Pay 1st installment after 30 days
+                                  </span>
+                                </div>
+                              )}
+
+                              {offer.offer_type === 'discounted_installment' && (
+                                <div>
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-black text-xs">
+                                    <CreditCard size={12} /> Discounted Monthly Installment
+                                  </span>
+                                  <span className="block text-xs font-bold text-slate-800 mt-0.5">
+                                    Rate: <span className="text-blue-600 font-black">Rs. {offer.custom_installment_amount?.toLocaleString()} / mo</span>
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* STATUS */}
+                          <td className="py-4 px-4 text-center">
+                            <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
+                              offer.status === 'redeemed' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                              offer.status === 'expired' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                              'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            }`}>
+                              {offer.status || 'active'}
+                            </span>
+                          </td>
+
+                          {/* ACTIONS */}
+                          <td className="py-4 px-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => {
+                                  const text = `Private Offer Details:\nTarget Student: ${offer.student_email}\nCourse: ${courseTitle}\nIssued By: ${issuerName}\nOffer Details: ${
+                                    offer.offer_type === 'added_discount' ? `${offer.discount_percent}% Discount (Rs. ${offer.custom_total_price})` :
+                                    offer.offer_type === 'free_month_trial' ? '1-Month Free Access' :
+                                    `Rs. ${offer.custom_installment_amount}/mo Installments`
+                                  }`;
+                                  navigator.clipboard.writeText(text);
+                                  setCopiedOfferId(offer.id);
+                                  setTimeout(() => setCopiedOfferId(null), 2000);
+                                }}
+                                title="Copy offer details"
+                                className="p-2 hover:bg-gray-100 rounded-xl text-gray-600 transition-colors"
+                              >
+                                {copiedOfferId === offer.id ? <CheckCircle2 size={16} className="text-emerald-600" /> : <Copy size={16} />}
+                              </button>
+
+                              {offer.status !== 'expired' && offer.status !== 'redeemed' && (
+                                <button
+                                  onClick={() => handleRevokeOffer(offer.id)}
+                                  title="Revoke / Expire Offer"
+                                  className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-xl transition-colors"
+                                >
+                                  Revoke
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() => handleDeleteOffer(offer.id)}
+                                title="Delete Record"
+                                className="p-2 hover:bg-rose-50 rounded-xl text-rose-600 transition-colors"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    {filteredOffers.length === 0 && (
+                      <tr>
+                        <td colSpan="7" className="py-12 text-center text-gray-400">
+                          <Tag size={36} className="mx-auto mb-2 opacity-30" />
+                          <p className="font-bold text-slate-700">No private offers found matching criteria.</p>
+                          <p className="text-xs text-gray-400 mt-1">Offers generated by Faiz Ali, Nabiha Irfan, or Admin will appear here.</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -1935,8 +2431,144 @@ export default function AdminDashboard() {
           }}
           onConvertToOffer={(lead) => {
             setAdminTab('sales');
+            setNewOfferData(prev => ({
+              ...prev,
+              studentEmail: lead.email || '',
+              courseSlug: adminCourses[0]?.slug || ''
+            }));
+            setIsCreateOfferModalOpen(true);
           }}
         />
+      )}
+
+      {/* Admin Create Private Offer Modal */}
+      {isCreateOfferModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 max-w-lg w-full p-6 space-y-5 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-emerald-600 text-white rounded-xl">
+                  <Gift size={20} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-lg">Issue Admin Private Offer</h3>
+                  <p className="text-xs text-gray-500">Create a personalized offer for a student</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCreateOfferModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-full transition-all"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {offerFormMsg.text && (
+              <div className={`p-4 rounded-2xl text-xs font-bold flex items-center gap-2 ${
+                offerFormMsg.type === 'error' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              }`}>
+                {offerFormMsg.type === 'error' ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
+                {offerFormMsg.text}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateAdminOffer} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">
+                  Whom: Student Email Address <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={newOfferData.studentEmail}
+                  onChange={(e) => setNewOfferData({ ...newOfferData, studentEmail: e.target.value })}
+                  placeholder="student@gmail.com"
+                  className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">
+                  Which: Target Course <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={newOfferData.courseSlug}
+                  onChange={(e) => setNewOfferData({ ...newOfferData, courseSlug: e.target.value })}
+                  className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {adminCourses.map(c => (
+                    <option key={c.id || c.slug} value={c.slug}>
+                      {c.name} ({formatCurrency(parsePrice(c.price))})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-gray-500 mb-1">
+                  How Issued: Offer Type <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={newOfferData.offerType}
+                  onChange={(e) => setNewOfferData({ ...newOfferData, offerType: e.target.value })}
+                  className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="added_discount">Percentage Discount (Extra % Off)</option>
+                  <option value="free_month_trial">1-Month Free Access (Delayed 1st Installment)</option>
+                  <option value="discounted_installment">Discounted Monthly Installment Rate</option>
+                </select>
+              </div>
+
+              {newOfferData.offerType === 'added_discount' && (
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">
+                    Discount Percentage (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={newOfferData.discountPercent}
+                    onChange={(e) => setNewOfferData({ ...newOfferData, discountPercent: e.target.value })}
+                    className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                    placeholder="e.g. 10"
+                  />
+                </div>
+              )}
+
+              {newOfferData.offerType === 'discounted_installment' && (
+                <div>
+                  <label className="block text-xs font-bold uppercase text-gray-500 mb-1">
+                    Custom Monthly Rate (Rs / month)
+                  </label>
+                  <input
+                    type="number"
+                    value={newOfferData.customInstallment}
+                    onChange={(e) => setNewOfferData({ ...newOfferData, customInstallment: e.target.value })}
+                    className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                    placeholder="e.g. 3500"
+                  />
+                </div>
+              )}
+
+              <div className="pt-3 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOfferModalOpen(false)}
+                  className="px-5 py-3 rounded-2xl text-xs font-bold text-gray-600 hover:bg-gray-100 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-3 rounded-2xl text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 shadow-lg transition-all"
+                >
+                  Issue Offer Now
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
