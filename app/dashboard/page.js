@@ -75,12 +75,19 @@ export default function StudentDashboard() {
       setUserEmail(email);
       setStudentName(email.split('@')[0]);
       
-      // Fetch user profile from users table
-      const { data: userProfile, error: profileError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', email)
-        .single();
+      // Fetch user profile from users table using case-insensitive ilike without .single() crash
+      let userProfile = null;
+      try {
+        const { data: uProfiles } = await supabase
+          .from('users')
+          .select('*')
+          .ilike('email', email.trim());
+        if (uProfiles && uProfiles.length > 0) {
+          userProfile = uProfiles[0];
+        }
+      } catch (e) {
+        console.warn('Profile fetch warning:', e);
+      }
         
       if (userProfile) {
         if (userProfile.role === 'teacher') {
@@ -98,9 +105,10 @@ export default function StudentDashboard() {
         setPhoneNumber(userProfile.phone || '');
         setIntro(userProfile.intro || '');
         setImage(userProfile.image || '');
-      } else if (!profileError || profileError.code === 'PGRST116') {
-        // User doesn't exist in users table (maybe Google login), let's create a stub
-        await supabase.from('users').insert([{ email, full_name: email.split('@')[0], role: 'student' }]);
+      } else {
+        try {
+          await supabase.from('users').insert([{ email, full_name: email.split('@')[0], role: 'student' }]);
+        } catch (e) {}
       }
 
       // Fetch all purchases for this user from Supabase using case-insensitive ilike
