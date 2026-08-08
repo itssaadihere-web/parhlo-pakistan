@@ -346,11 +346,13 @@ export default function DynamicCourseDetail() {
   const submitFreeTrialActivation = async () => {
     setLoading(true);
     try {
+      const cleanEmail = (userEmail || window.localStorage.getItem('currentUserEmail') || '').trim().toLowerCase();
       const origPrice = courseData?.rawOriginalPrice || 7000;
       const monthlyInst = Math.round(origPrice / 3);
 
       const newPurchase = {
-        student_email: userEmail,
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'purchase_' + Date.now(),
+        student_email: cleanEmail,
         course_slug: courseData.slug,
         status: 'approved',
         payment_plan: 'free_trial',
@@ -359,11 +361,24 @@ export default function DynamicCourseDetail() {
         monthly_installment_amount: monthlyInst,
         installments_paid: 0,
         next_due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        offer_id: activeOffer?.id
+        offer_id: activeOffer?.id,
+        created_at: new Date().toISOString()
       };
 
-      const { error } = await supabase.from('purchases').insert([newPurchase]);
-      if (error) console.warn("Supabase insert warning:", error);
+      try {
+        await supabase.from('purchases').insert([newPurchase]);
+      } catch (e) {
+        console.warn("Supabase insert warning:", e);
+      }
+
+      // Local storage fallback for purchases
+      try {
+        const localP = JSON.parse(window.localStorage.getItem('parhlo_purchases') || '[]');
+        if (!localP.some(p => p.course_slug === newPurchase.course_slug && p.student_email === cleanEmail)) {
+          localP.push(newPurchase);
+          window.localStorage.setItem('parhlo_purchases', JSON.stringify(localP));
+        }
+      } catch (e) {}
 
       // Redeem offer
       if (activeOffer?.id) {
@@ -380,7 +395,12 @@ export default function DynamicCourseDetail() {
       setPaymentStatus('approved');
       setPurchaseRecord(newPurchase);
       setShowPaymentModal(false);
-      alert("1-Month Free Access Activated! You can watch up to 1/12th of total course video duration during your trial. Your 1st & 2nd month installments will be due after 30 days.");
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('storage'));
+      }
+
+      alert("1-Month Free Access Activated! You can watch up to 1/3rd of total course video duration during your trial. Your 1st & 2nd month installments will be due after 30 days.");
     } catch (err) {
       console.error("Free trial error:", err);
       alert("Failed to activate 1-Month Free Access. Please try again.");
