@@ -145,32 +145,30 @@ export default function StudentDashboard() {
         }
 
         for (const offer of activeOffers) {
-          if (offer.offer_type === 'free_month_trial') {
-            const hasPurchase = purchasesList.some(p => (p.course_slug || '').trim().toLowerCase() === (offer.course_slug || '').trim().toLowerCase());
-            if (!hasPurchase) {
-              const offerCreated = new Date(offer.created_at || Date.now());
-              const nextDueDate = new Date(offerCreated.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
-              const autoPurchase = {
-                id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'purchase_' + Date.now(),
-                student_email: email.trim().toLowerCase(),
-                course_slug: offer.course_slug,
-                status: 'approved',
-                payment_plan: 'free_trial',
-                amount_paid: 0,
-                total_price: offer.custom_total_price || 0,
-                monthly_installment_amount: offer.custom_installment_amount || 0,
-                offer_id: offer.id,
-                next_due_date: nextDueDate,
-                created_at: offerCreated.toISOString()
-              };
+          const hasPurchase = purchasesList.some(p => (p.course_slug || '').trim().toLowerCase() === (offer.course_slug || '').trim().toLowerCase());
+          if (!hasPurchase) {
+            const offerCreated = new Date(offer.created_at || Date.now());
+            const nextDueDate = new Date(offerCreated.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+            const autoPurchase = {
+              id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'purchase_' + Date.now(),
+              student_email: email.trim().toLowerCase(),
+              course_slug: offer.course_slug,
+              status: 'approved',
+              payment_plan: offer.offer_type === 'free_month_trial' ? 'free_trial' : 'installment',
+              amount_paid: 0,
+              total_price: offer.custom_total_price || 0,
+              monthly_installment_amount: offer.custom_installment_amount || 0,
+              offer_id: offer.id,
+              next_due_date: nextDueDate,
+              created_at: offerCreated.toISOString()
+            };
 
-              try {
-                await supabase.from('purchases').insert([autoPurchase]);
-              } catch (e) {
-                console.warn('DB auto purchase insert warning:', e);
-              }
-              purchasesList.push(autoPurchase);
+            try {
+              await supabase.from('purchases').insert([autoPurchase]);
+            } catch (e) {
+              console.warn('DB auto purchase insert warning:', e);
             }
+            purchasesList.push(autoPurchase);
           }
         }
       } catch (err) {
