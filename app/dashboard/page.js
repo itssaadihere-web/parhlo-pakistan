@@ -103,11 +103,11 @@ export default function StudentDashboard() {
         await supabase.from('users').insert([{ email, full_name: email.split('@')[0], role: 'student' }]);
       }
 
-      // Fetch all purchases for this user from Supabase
+      // Fetch all purchases for this user from Supabase using case-insensitive ilike
       const { data: userPurchases, error: purchasesError } = await supabase
         .from('purchases')
         .select('*')
-        .eq('student_email', email);
+        .ilike('student_email', email.trim());
 
       let purchasesList = userPurchases || [];
 
@@ -116,24 +116,24 @@ export default function StudentDashboard() {
         const { data: dbOffers } = await supabase
           .from('sales_offers')
           .select('*')
-          .ilike('student_email', email)
+          .ilike('student_email', email.trim())
           .eq('status', 'active');
         
         let activeOffers = dbOffers || [];
         if (activeOffers.length === 0) {
           const local = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
-          activeOffers = local.filter(o => o.student_email?.toLowerCase() === email.toLowerCase() && (o.status === 'active' || !o.status));
+          activeOffers = local.filter(o => o.student_email?.toLowerCase() === email.trim().toLowerCase() && (o.status === 'active' || !o.status));
         }
 
         for (const offer of activeOffers) {
           if (offer.offer_type === 'free_month_trial') {
-            const hasPurchase = purchasesList.some(p => p.course_slug === offer.course_slug);
+            const hasPurchase = purchasesList.some(p => (p.course_slug || '').trim().toLowerCase() === (offer.course_slug || '').trim().toLowerCase());
             if (!hasPurchase) {
               const offerCreated = new Date(offer.created_at || Date.now());
               const nextDueDate = new Date(offerCreated.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
               const autoPurchase = {
                 id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'purchase_' + Date.now(),
-                student_email: email,
+                student_email: email.trim().toLowerCase(),
                 course_slug: offer.course_slug,
                 status: 'approved',
                 payment_plan: 'free_trial',
@@ -185,7 +185,9 @@ export default function StudentDashboard() {
           let totalStudySecondsAll = 0;
 
           const activeCourses = approved.map(purchase => {
-            const course = adminCourses.find(c => c.slug === purchase.course_slug);
+            const course = adminCourses.find(c => 
+              (c.slug || '').trim().toLowerCase() === (purchase.course_slug || '').trim().toLowerCase()
+            );
             if (!course) return null;
             
             // Read watched time per lecture from localStorage
