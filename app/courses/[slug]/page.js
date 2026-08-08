@@ -98,16 +98,20 @@ export default function DynamicCourseDetail() {
         return;
       }
 
-      if (email && slug) {
-        // Fetch purchase status from Supabase
-        const { data: purchase, error } = await supabase
+      const cleanEmail = (email || window.localStorage.getItem('currentUserEmail') || '').trim().toLowerCase();
+      if (cleanEmail && slug) {
+        // Fetch purchase status from Supabase using ilike without .single() crash
+        const { data: purchases, error } = await supabase
           .from('purchases')
           .select('*')
-          .eq('student_email', email)
-          .eq('course_slug', slug)
-          .single();
+          .ilike('student_email', cleanEmail)
+          .eq('course_slug', slug);
 
-        if (!error && purchase) {
+        const purchase = purchases && purchases.length > 0 
+          ? (purchases.find(p => p.status === 'approved') || purchases[0])
+          : null;
+
+        if (purchase) {
           setPurchaseRecord(purchase);
           
           let isDue = false;
@@ -126,17 +130,15 @@ export default function DynamicCourseDetail() {
           setIsInstallmentDue(false);
         }
 
-        // Fetch active sales offer for this student & course
+        // Fetch active/redeemed sales offer for this student & course
         let foundOffer = null;
         try {
-          const { data: dbOffer } = await supabase
+          const { data: dbOffers } = await supabase
             .from('sales_offers')
             .select('*')
-            .eq('student_email', email.toLowerCase())
-            .eq('course_slug', slug)
-            .eq('status', 'active')
-            .single();
-          if (dbOffer) foundOffer = dbOffer;
+            .ilike('student_email', cleanEmail)
+            .eq('course_slug', slug);
+          if (dbOffers && dbOffers.length > 0) foundOffer = dbOffers[0];
         } catch (e) {}
 
         if (!foundOffer) {

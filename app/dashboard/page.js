@@ -200,11 +200,17 @@ export default function StudentDashboard() {
       const { data: dbCourses } = await supabase.from('courses').select('*');
       const adminCourses = dbCourses && dbCourses.length > 0 ? dbCourses : DEFAULT_COURSES;
 
-      const approved = purchasesList.filter(p => 
-        (p.status || '').toLowerCase() === 'approved' || 
-        (p.status || '').toLowerCase() === 'active' || 
-        p.payment_plan === 'free_trial'
-      );
+      const uniqueApprovedMap = new Map();
+      purchasesList.forEach(p => {
+        const isApp = (p.status || '').toLowerCase() === 'approved' || (p.status || '').toLowerCase() === 'active' || p.payment_plan === 'free_trial';
+        if (isApp && p.course_slug) {
+          const slugKey = p.course_slug.trim().toLowerCase();
+          if (!uniqueApprovedMap.has(slugKey)) {
+            uniqueApprovedMap.set(slugKey, p);
+          }
+        }
+      });
+      const approved = Array.from(uniqueApprovedMap.values());
       let totalStudySecondsAll = 0;
 
       const activeCourses = approved.map(purchase => {
