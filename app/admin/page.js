@@ -745,8 +745,17 @@ export default function AdminDashboard() {
 
   if (!isAdmin) return null;
 
-  const pendingApprovals = payments.filter(p => p.status === 'pending');
-  const approvedPayments = payments.filter(p => p.status === 'approved');
+  const isRealPayment = (p) => {
+    // A record is a financial payment transaction if an amount was paid (>0) or a payment receipt was uploaded.
+    // Free trial activations or zero-amount initial offers without receipts are access enrollments, not monetary payment approvals.
+    if ((p.paymentPlan === 'free_trial' || p.amountPaid === 0) && !p.receiptImage && (!p.amountPaid || p.amountPaid === 0)) {
+      return false;
+    }
+    return true;
+  };
+
+  const pendingApprovals = payments.filter(p => p.status === 'pending' && (p.receiptImage || (p.amountPaid && p.amountPaid > 0)));
+  const approvedPayments = payments.filter(p => p.status === 'approved' && isRealPayment(p));
 
   const getEnrollments = () => {
     let studentEmails = [...new Set(payments.filter(p => ['approved', 'suspended'].includes(p.status)).map(p => p.userEmail))];
@@ -888,7 +897,7 @@ export default function AdminDashboard() {
               <div className="col-span-2 bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm">
                 <h3 className="text-xl font-black mb-6">Recent Activity</h3>
                 <div className="space-y-6">
-                  {payments.slice(-4).reverse().map((activity, i) => (
+                  {payments.filter(isRealPayment).slice(-4).reverse().map((activity, i) => (
                     <div key={i} className="flex justify-between items-center pb-6 border-b border-gray-50 last:border-0">
                       <div className="flex gap-4 items-center">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center ${activity.status === 'approved' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
