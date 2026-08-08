@@ -63,6 +63,13 @@ export default function StudentDashboard() {
           } else {
             window.localStorage.setItem('parhloAdmin', 'false');
           }
+
+          // Mark lead status as 'signed_in' in CRM for Google login users
+          try {
+            await supabase.from('leads').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('email', email);
+          } catch (e) {
+            console.warn('Lead status update warning on Google login:', e);
+          }
         }
       } catch (err) {
         console.error(err);
@@ -108,9 +115,13 @@ export default function StudentDashboard() {
         setImage(userProfile.image || '');
       } else {
         try {
-          await supabase.from('users').insert([{ email, full_name: email.split('@')[0], role: 'student' }]);
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          const fullNameFromAuth = currentSession?.user?.user_metadata?.full_name || currentSession?.user?.user_metadata?.name || email.split('@')[0];
+          await supabase.from('users').insert([{ email, full_name: fullNameFromAuth, role: 'student' }]);
+          setStudentName(fullNameFromAuth);
         } catch (e) {}
       }
+
 
       // Fetch all purchases for this user from Supabase using case-insensitive ilike
       let purchasesList = [];
