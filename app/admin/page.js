@@ -154,12 +154,18 @@ export default function AdminDashboard() {
         const discountPercent = parseFloat(String(course?.discount || '0').replace(/[^0-9.]/g, '')) || 0;
         const finalPrice = discountPercent > 0 ? Math.round(originalPrice * (1 - discountPercent / 100)) : originalPrice;
 
+        const isFreeTrial = p.payment_plan === 'free_trial';
+        const actualAmountPaid = (p.amount_paid !== undefined && p.amount_paid !== null && p.amount_paid !== '')
+          ? Number(p.amount_paid)
+          : (isFreeTrial ? 0 : finalPrice);
+
         return {
           id: p.id,
           userEmail: p.student_email,
           courseSlug: p.course_slug,
           courseName: course ? course.name : p.course_slug,
           coursePrice: finalPrice,
+          amountPaid: actualAmountPaid,
           status: p.status,
           receiptImage: p.payment_screenshot_url,
           date: new Date(p.created_at).toLocaleDateString(),
@@ -851,7 +857,7 @@ export default function AdminDashboard() {
 
             <div className="grid grid-cols-4 gap-6 mb-10">
               {[
-                { label: 'Total Revenue', val: formatCurrency(approvedPayments.reduce((sum, p) => sum + (p.coursePrice || 0), 0)), color: 'bg-green-50 text-green-600' },
+                { label: 'Total Revenue', val: formatCurrency(approvedPayments.reduce((sum, p) => sum + (p.amountPaid !== undefined ? p.amountPaid : (p.coursePrice || 0)), 0)), color: 'bg-green-50 text-green-600' },
                 { label: 'Total Students', val: approvedPayments.length, color: 'bg-blue-50 text-blue-600' },
                 { label: 'Active Subjects', val: String(adminCourses.length), color: 'bg-emerald-50 text-emerald-600' },
                 { label: 'Pending Approvals', val: String(pendingApprovals.length), color: 'bg-amber-50 text-amber-600' },
