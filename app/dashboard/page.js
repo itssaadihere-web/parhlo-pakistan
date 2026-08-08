@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/utils/supabase';
 import InactivityTracker from '@/app/components/InactivityTracker';
+import { formatCurrency, parsePrice } from '@/utils/currencyHelpers';
 
 export default function StudentDashboard() {
   const router = useRouter();
