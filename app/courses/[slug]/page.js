@@ -176,6 +176,64 @@ export default function DynamicCourseDetail() {
           setProfileName(userProfile.full_name && userProfile.full_name !== email.split('@')[0] ? userProfile.full_name : '');
           setProfilePhone(userProfile.phone || '');
         }
+
+        // Fetch & sync user video progress with Supabase
+        try {
+          const { data: dbProgress } = await supabase
+            .from('user_video_progress')
+            .select('*')
+            .ilike('student_email', cleanEmail)
+            .eq('course_slug', slug);
+
+          const keyTotal = `parhlo_watch_${cleanEmail}_${slug}`;
+          let localProgress = {};
+          try {
+            localProgress = JSON.parse(window.localStorage.getItem(keyTotal) || '{}');
+            if (typeof localProgress !== 'object' || localProgress === null) localProgress = {};
+          } catch (e) {}
+
+          const dbMap = {};
+          if (dbProgress && dbProgress.length > 0) {
+            dbProgress.forEach(row => {
+              dbMap[String(row.lecture_id)] = Number(row.watched_seconds) || 0;
+            });
+          }
+
+          // 1. Migrate local history to Supabase if local has higher or unsaved seconds
+          const upsertRows = [];
+          Object.keys(localProgress).forEach(lecId => {
+            const localSec = Number(localProgress[lecId]) || 0;
+            const dbSec = dbMap[lecId] || 0;
+            if (localSec > dbSec) {
+              upsertRows.push({
+                student_email: cleanEmail,
+                course_slug: slug,
+                lecture_id: lecId,
+                watched_seconds: localSec,
+                last_watched_at: new Date().toISOString()
+              });
+              dbMap[lecId] = localSec;
+            }
+          });
+
+          if (upsertRows.length > 0) {
+            await supabase.from('user_video_progress').upsert(upsertRows, { onConflict: 'student_email,course_slug,lecture_id' });
+          }
+
+          // 2. Sync Supabase data into local storage if Supabase has data local device doesn't have
+          let updatedLocal = false;
+          Object.keys(dbMap).forEach(lecId => {
+            if ((localProgress[lecId] || 0) < dbMap[lecId]) {
+              localProgress[lecId] = dbMap[lecId];
+              updatedLocal = true;
+            }
+          });
+          if (updatedLocal) {
+            window.localStorage.setItem(keyTotal, JSON.stringify(localProgress));
+          }
+        } catch (e) {
+          console.warn('Video progress sync error:', e);
+        }
       }
     }
   };
@@ -555,7 +613,8 @@ export default function DynamicCourseDetail() {
         }
 
         if (currentSeconds < maxSeconds) {
-           progressData[lectureId] = currentSeconds + 10;
+           const newSeconds = currentSeconds + 10;
+           progressData[lectureId] = newSeconds;
            window.localStorage.setItem(keyTotal, JSON.stringify(progressData));
 
            if (plan !== 'full') {
@@ -569,6 +628,20 @@ export default function DynamicCourseDetail() {
              weeklyMap[currentWeekId] = currentWeeklySec + 10;
              window.localStorage.setItem(weekKey, JSON.stringify(weeklyMap));
            }
+
+           // Upsert watched time to Supabase user_video_progress
+           supabase
+             .from('user_video_progress')
+             .upsert([{
+               student_email: userEmail.trim().toLowerCase(),
+               course_slug: courseData.slug,
+               lecture_id: lectureId,
+               watched_seconds: newSeconds,
+               last_watched_at: new Date().toISOString()
+             }], { onConflict: 'student_email,course_slug,lecture_id' })
+             .then(({ error }) => {
+               if (error) console.error('Error saving video progress to Supabase:', error);
+             });
         }
       }, 10000);
     }

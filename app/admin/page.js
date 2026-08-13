@@ -61,6 +61,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [teachers, setTeachers] = useState([]);
   const [students, setStudents] = useState([]);
+  const [videoProgressList, setVideoProgressList] = useState([]);
   const [editingProfile, setEditingProfile] = useState(null);
   const [newTeacher, setNewTeacher] = useState({ name: '', email: '', password: '' });
   const [teacherMessage, setTeacherMessage] = useState('');
@@ -227,6 +228,18 @@ export default function AdminDashboard() {
       console.error('Error fetching students:', studentsError);
     } else {
       setStudents(studentsData || []);
+    }
+
+    // Fetch video progress from Supabase
+    try {
+      const { data: vProgress, error: vError } = await supabase
+        .from('user_video_progress')
+        .select('*');
+      if (!vError && vProgress) {
+        setVideoProgressList(vProgress);
+      }
+    } catch (e) {
+      console.warn('Error fetching video progress:', e);
     }
 
     // Fetch CRM Leads
@@ -1820,27 +1833,52 @@ export default function AdminDashboard() {
                   </thead>
                   <tbody className="divide-y divide-gray-50 font-medium">
                     {payments.filter(p => p.status === 'approved').map(p => {
+                      const cleanEmail = (p.userEmail || '').trim().toLowerCase();
+                      const cleanSlug = (p.courseSlug || '').trim().toLowerCase();
+
+                      // Filter progress from Supabase
+                      const studentProgress = videoProgressList.filter(row => 
+                        (row.student_email || '').trim().toLowerCase() === cleanEmail &&
+                        (row.course_slug || '').trim().toLowerCase() === cleanSlug
+                      );
+
+                      let dbTotalSec = studentProgress.reduce((acc, r) => acc + (Number(r.watched_seconds) || 0), 0);
+
+                      // Local storage fallback for admin's local testing
                       const key = `parhlo_watch_${p.userEmail}_${p.courseSlug}`;
-                      let watchMap = {};
+                      let localTotalSec = 0;
                       try {
-                        watchMap = JSON.parse(window.localStorage.getItem(key) || '{}');
+                        const watchMap = JSON.parse(window.localStorage.getItem(key) || '{}');
+                        localTotalSec = Object.values(watchMap).reduce((a, b) => a + (Number(b) || 0), 0);
                       } catch (e) {}
-                      const totalSec = Object.values(watchMap).reduce((a, b) => a + (Number(b) || 0), 0);
+
+                      const totalSec = Math.max(dbTotalSec, localTotalSec);
                       const hrs = (totalSec / 3600).toFixed(1);
                       const mins = Math.round(totalSec / 60);
 
+                      // Weekly calculation from Supabase
                       const now = new Date();
+                      const startOfWeek = new Date(now);
+                      startOfWeek.setDate(now.getDate() - now.getDay());
+                      startOfWeek.setHours(0, 0, 0, 0);
+
+                      const dbWeeklySec = studentProgress
+                        .filter(r => r.last_watched_at && new Date(r.last_watched_at) >= startOfWeek)
+                        .reduce((acc, r) => acc + (Number(r.watched_seconds) || 0), 0);
+
                       const startOfYear = new Date(now.getFullYear(), 0, 1);
                       const dayOfYear = Math.floor((now - startOfYear) / (24 * 60 * 60 * 1000));
                       const weekNum = Math.ceil((dayOfYear + startOfYear.getDay() + 1) / 7);
                       const currentWeekId = `${now.getFullYear()}_W${weekNum}`;
 
                       const weekKey = `parhlo_weekly_${p.userEmail}_${p.courseSlug}`;
-                      let weeklySec = 0;
+                      let localWeeklySec = 0;
                       try {
                         const weeklyMap = JSON.parse(window.localStorage.getItem(weekKey) || '{}');
-                        weeklySec = Number(weeklyMap[currentWeekId]) || 0;
+                        localWeeklySec = Number(weeklyMap[currentWeekId]) || 0;
                       } catch (e) {}
+
+                      const weeklySec = Math.max(dbWeeklySec, localWeeklySec);
 
                       const courseObj = adminCourses.find(c => c.slug === p.courseSlug);
                       const totalLectures = courseObj?.lectures?.length || 1;

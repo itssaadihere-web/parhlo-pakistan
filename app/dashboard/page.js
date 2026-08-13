@@ -233,6 +233,18 @@ export default function StudentDashboard() {
         console.error('Error auto-syncing sales offers:', err);
       }
 
+      // Fetch user video progress from Supabase
+      let dbVideoProgressList = [];
+      try {
+        const { data: vProgress } = await supabase
+          .from('user_video_progress')
+          .select('*')
+          .ilike('student_email', email.trim());
+        if (vProgress) dbVideoProgressList = vProgress;
+      } catch (e) {
+        console.warn('DB video progress fetch warning:', e);
+      }
+
       const isApprovedStatus = (p) => {
         const st = (p.status || '').toLowerCase();
         return (
@@ -303,7 +315,7 @@ export default function StudentDashboard() {
           price: 'Rs. 9,999'
         };
             
-            // Read watched time per lecture from localStorage
+            // Read watched time per lecture from localStorage & Supabase
             const key = `parhlo_watch_${email}_${course.slug}`;
             let progressData = {};
             try {
@@ -312,6 +324,17 @@ export default function StudentDashboard() {
             } catch (e) {
               progressData = {};
             }
+
+            // Merge Supabase video progress
+            const courseSlugLower = (course.slug || '').trim().toLowerCase();
+            const courseDbProgress = dbVideoProgressList.filter(p => (p.course_slug || '').trim().toLowerCase() === courseSlugLower);
+            courseDbProgress.forEach(p => {
+              const lecId = String(p.lecture_id);
+              const secFromDb = Number(p.watched_seconds) || 0;
+              if (!progressData[lecId] || secFromDb > progressData[lecId]) {
+                progressData[lecId] = secFromDb;
+              }
+            });
             
             let watchedSeconds = 0;
             let completedLectures = 0;
@@ -348,11 +371,24 @@ export default function StudentDashboard() {
             const currentWeekId = `${now.getFullYear()}_W${weekNum}`;
 
             const weekKey = `parhlo_weekly_${email}_${course.slug}`;
-            let weeklyWatchedSec = 0;
+            let localWeeklyWatchedSec = 0;
             try {
               const weeklyMap = JSON.parse(window.localStorage.getItem(weekKey) || '{}');
-              weeklyWatchedSec = Number(weeklyMap[currentWeekId]) || 0;
+              localWeeklyWatchedSec = Number(weeklyMap[currentWeekId]) || 0;
             } catch (e) {}
+
+            const dbWeeklySec = courseDbProgress
+              .filter(r => {
+                if (!r.last_watched_at) return false;
+                const rDate = new Date(r.last_watched_at);
+                const startOfWeek = new Date(now);
+                startOfWeek.setDate(now.getDate() - now.getDay());
+                startOfWeek.setHours(0, 0, 0, 0);
+                return rDate >= startOfWeek;
+              })
+              .reduce((acc, r) => acc + (Number(r.watched_seconds) || 0), 0);
+
+            const weeklyWatchedSec = Math.max(localWeeklyWatchedSec, dbWeeklySec);
 
             const weeklyLimitSeconds = Math.round(estimatedTotalSeconds / 12);
             const oneMonthFreeLimitSeconds = Math.round(estimatedTotalSeconds / 3);
