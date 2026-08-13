@@ -1955,37 +1955,7 @@ export default function AdminDashboard() {
                               {isFreeTrial ? '1-Month Free Access' : `${p.paymentPlan} Plan`}
                             </span>
                           </td>
-                          <td className="py-4 font-mono font-bold text-slate-900">
-                            {hrs} hrs ({mins} mins)
-                            <button
-                              onClick={() => {
-                                const val = prompt(`Enter watched minutes to set/add for ${p.userEmail} in ${p.courseName}:`, mins);
-                                if (val !== null) {
-                                  const targetMins = parseInt(val) || 0;
-                                  supabase
-                                    .from('user_video_progress')
-                                    .upsert([{
-                                      student_email: cleanEmail,
-                                      course_slug: cleanSlug,
-                                      lecture_id: 'lecture_1',
-                                      watched_seconds: targetMins * 60,
-                                      last_watched_at: new Date().toISOString()
-                                    }], { onConflict: 'student_email,course_slug,lecture_id' })
-                                    .then(({ error }) => {
-                                      if (error) alert('Error: ' + error.message);
-                                      else {
-                                        alert(`Updated watch time for ${cleanEmail} to ${targetMins} mins!`);
-                                        fetchData();
-                                      }
-                                    });
-                                }
-                              }}
-                              className="ml-2 text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-sans font-bold cursor-pointer inline-block"
-                              title="Manually set or sync student watch minutes"
-                            >
-                              ⚙ Edit
-                            </button>
-                          </td>
+                          <td className="py-4 font-mono font-bold text-slate-900">{hrs} hrs ({mins} mins)</td>
                           <td className="py-4">
                             {isFullPlan ? (
                               <span className="text-xs font-bold text-emerald-600">Full Unrestricted Access</span>
