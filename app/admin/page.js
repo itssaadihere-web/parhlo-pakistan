@@ -230,6 +230,43 @@ export default function AdminDashboard() {
       setStudents(studentsData || []);
     }
 
+    // Auto-sync any local storage watch progress on this machine to Supabase
+    if (typeof window !== 'undefined') {
+      try {
+        const localUpserts = [];
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const k = window.localStorage.key(i);
+          if (k && k.startsWith('parhlo_watch_')) {
+            const parts = k.split('_');
+            if (parts.length >= 4) {
+              const uEmail = parts[2].trim().toLowerCase();
+              const cSlug = parts.slice(3).join('_').trim().toLowerCase();
+              try {
+                const map = JSON.parse(window.localStorage.getItem(k) || '{}');
+                Object.keys(map).forEach(lecId => {
+                  const sec = Number(map[lecId]) || 0;
+                  if (sec > 0) {
+                    localUpserts.push({
+                      student_email: uEmail,
+                      course_slug: cSlug,
+                      lecture_id: String(lecId),
+                      watched_seconds: sec,
+                      last_watched_at: new Date().toISOString()
+                    });
+                  }
+                });
+              } catch (e) {}
+            }
+          }
+        }
+        if (localUpserts.length > 0) {
+          await supabase.from('user_video_progress').upsert(localUpserts, { onConflict: 'student_email,course_slug,lecture_id' });
+        }
+      } catch (e) {
+        console.warn('Local watch auto-sync warning:', e);
+      }
+    }
+
     // Fetch video progress from Supabase
     try {
       const { data: vProgress, error: vError } = await supabase
@@ -1813,9 +1850,20 @@ export default function AdminDashboard() {
 
         {adminTab === 'analytics' && (
           <div>
-            <div className="mb-8">
-              <h1 className="text-3xl font-black text-slate-900">Student Study Performance & Watch Analytics</h1>
-              <p className="text-gray-500 mt-1">Monitor study hours, completion rates, and free trial 1/12th watch limits for all enrolled students.</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+              <div>
+                <h1 className="text-3xl font-black text-slate-900">Student Study Performance & Watch Analytics</h1>
+                <p className="text-gray-500 mt-1">Monitor study hours, completion rates, and free trial 1/12th watch limits for all enrolled students.</p>
+              </div>
+              <button 
+                onClick={async () => {
+                  await fetchData();
+                  alert('Analytics refreshed and synced with database!');
+                }} 
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition self-start sm:self-auto cursor-pointer"
+              >
+                🔄 Sync & Refresh Analytics
+              </button>
             </div>
 
             <div className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm">
@@ -1836,11 +1884,16 @@ export default function AdminDashboard() {
                       const cleanEmail = (p.userEmail || '').trim().toLowerCase();
                       const cleanSlug = (p.courseSlug || '').trim().toLowerCase();
 
-                      // Filter progress from Supabase
-                      const studentProgress = videoProgressList.filter(row => 
-                        (row.student_email || '').trim().toLowerCase() === cleanEmail &&
-                        (row.course_slug || '').trim().toLowerCase() === cleanSlug
-                      );
+                      // Filter progress from Supabase with flexible slug matching
+                      const studentProgress = videoProgressList.filter(row => {
+                        const rEmail = (row.student_email || '').trim().toLowerCase();
+                        const rSlug = (row.course_slug || '').trim().toLowerCase();
+                        const matchEmail = rEmail === cleanEmail;
+                        const cleanSlugBase = cleanSlug.replace(/-class-\d+/g, '').replace(/-smart/g, '');
+                        const rSlugBase = rSlug.replace(/-class-\d+/g, '').replace(/-smart/g, '');
+                        const matchSlug = rSlug === cleanSlug || cleanSlug.includes(rSlug) || rSlug.includes(cleanSlug) || cleanSlugBase === rSlugBase;
+                        return matchEmail && matchSlug;
+                      });
 
                       let dbTotalSec = studentProgress.reduce((acc, r) => acc + (Number(r.watched_seconds) || 0), 0);
 
@@ -1902,7 +1955,37 @@ export default function AdminDashboard() {
                               {isFreeTrial ? '1-Month Free Access' : `${p.paymentPlan} Plan`}
                             </span>
                           </td>
-                          <td className="py-4 font-mono font-bold text-slate-900">{hrs} hrs ({mins} mins)</td>
+                          <td className="py-4 font-mono font-bold text-slate-900">
+                            {hrs} hrs ({mins} mins)
+                            <button
+                              onClick={() => {
+                                const val = prompt(`Enter watched minutes to set/add for ${p.userEmail} in ${p.courseName}:`, mins);
+                                if (val !== null) {
+                                  const targetMins = parseInt(val) || 0;
+                                  supabase
+                                    .from('user_video_progress')
+                                    .upsert([{
+                                      student_email: cleanEmail,
+                                      course_slug: cleanSlug,
+                                      lecture_id: 'lecture_1',
+                                      watched_seconds: targetMins * 60,
+                                      last_watched_at: new Date().toISOString()
+                                    }], { onConflict: 'student_email,course_slug,lecture_id' })
+                                    .then(({ error }) => {
+                                      if (error) alert('Error: ' + error.message);
+                                      else {
+                                        alert(`Updated watch time for ${cleanEmail} to ${targetMins} mins!`);
+                                        fetchData();
+                                      }
+                                    });
+                                }
+                              }}
+                              className="ml-2 text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-sans font-bold cursor-pointer inline-block"
+                              title="Manually set or sync student watch minutes"
+                            >
+                              ⚙ Edit
+                            </button>
+                          </td>
                           <td className="py-4">
                             {isFullPlan ? (
                               <span className="text-xs font-bold text-emerald-600">Full Unrestricted Access</span>
