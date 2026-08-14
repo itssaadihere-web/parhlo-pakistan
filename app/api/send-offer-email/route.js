@@ -137,9 +137,19 @@ export async function POST(req) {
               </ul>
             </div>
 
+            <div style="background-color: #ffffff; padding: 20px; border-radius: 12px; margin: 24px 0; border: 1px solid #cbd5e1; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+              <h3 style="margin: 0 0 12px 0; color: #0f172a; font-size: 15px; font-weight: 800;">📌 How to Claim Your Offer (Step-by-Step):</h3>
+              <ol style="margin: 0; padding-left: 20px; color: #334155; font-size: 13px; line-height: 1.8; font-weight: 500;">
+                <li><strong>Step 1:</strong> Go to <a href="https://parhlopakistan.com.pk" style="color: #16a34a; font-weight: bold;">parhlopakistan.com.pk</a> and <strong>Sign Up / Log In</strong> using this email (<strong>${studentEmail}</strong>).</li>
+                <li><strong>Step 2:</strong> Navigate to your course page: <strong>${courseName || 'Course'}</strong>.</li>
+                <li><strong>Step 3:</strong> View your <strong>Exclusive Private Offer Banner</strong> displayed at the top of the course page.</li>
+                <li><strong>Step 4:</strong> Click <strong>"Claim Offer / Enroll Now"</strong> to activate your discount & access immediately!</li>
+              </ol>
+            </div>
+
             <div style="text-align: center; margin: 30px 0 20px 0;">
-              <a href="https://parhlopakistan.com.pk/dashboard" style="background-color: #16a34a; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: bold; font-size: 15px; display: inline-block; box-shadow: 0 4px 12px rgba(22, 163, 74, 0.25);">
-                Log In & Claim Your Offer →
+              <a href="https://parhlopakistan.com.pk/courses/${courseSlug || ''}" style="background-color: #16a34a; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: bold; font-size: 15px; display: inline-block; box-shadow: 0 4px 12px rgba(22, 163, 74, 0.25);">
+                Go to Course Page & Claim Offer →
               </a>
             </div>
 

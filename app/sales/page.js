@@ -217,6 +217,20 @@ export default function SalesDashboard() {
       return;
     }
 
+    let initialStatus = 'active';
+    try {
+      const cleanTargetEmail = studentEmail.trim().toLowerCase();
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .ilike('email', cleanTargetEmail)
+        .maybeSingle();
+
+      if (existingUser) {
+        initialStatus = 'signed_in';
+      }
+    } catch (e) {}
+
     const newOffer = {
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'offer_' + Date.now(),
       sales_email: currentUser.email,
@@ -226,7 +240,7 @@ export default function SalesDashboard() {
       discount_percent: offerType === 'independenceday_14' ? 14 : (offerType === 'added_discount' ? extraDisc : 0),
       custom_installment_amount: (offerType === 'discounted_installment' || offerType === 'independenceday_14') ? calculatedMonthlyInstallment : 0,
       custom_total_price: calculatedDiscountedPrice,
-      status: 'active',
+      status: initialStatus,
       created_at: new Date().toISOString()
     };
 
@@ -979,12 +993,13 @@ export default function SalesDashboard() {
                               {courseObj ? courseObj.name : offer.course_slug}
                             </span>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                            offer.status === 'redeemed' 
-                              ? 'bg-purple-100 text-purple-800 border border-purple-200' 
-                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                            offer.status === 'redeemed' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                            offer.status === 'signed_in' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                            offer.status === 'expired' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                            'bg-emerald-100 text-emerald-800 border border-emerald-200'
                           }`}>
-                            {offer.status}
+                            {offer.status === 'signed_in' ? 'SIGNED IN' : (offer.status || 'active')}
                           </span>
                         </div>
 
@@ -1011,13 +1026,23 @@ export default function SalesDashboard() {
                           <span>Issued by: <strong className="text-slate-800">{offer.sales_email}</strong></span>
                           <div className="flex items-center gap-3">
                             <span>{new Date(offer.created_at).toLocaleDateString()}</span>
-                            <button
-                              onClick={() => handleRevokeOffer(offer.id)}
-                              className="text-gray-400 hover:text-rose-600 p-1 transition-colors"
-                              title="Revoke Offer"
-                            >
-                              <Trash2 size={16} />
-                            </button>
+                            {offer.status === 'redeemed' ? (
+                              <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-100">
+                                Claimed (Cannot Revoke)
+                              </span>
+                            ) : offer.status === 'expired' ? (
+                              <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100">
+                                Revoked
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleRevokeOffer(offer.id)}
+                                className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                                title="Revoke Offer"
+                              >
+                                Revoke
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>

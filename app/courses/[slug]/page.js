@@ -158,14 +158,10 @@ export default function DynamicCourseDetail() {
           if (dbOffers && dbOffers.length > 0) foundOffer = dbOffers[0];
         } catch (e) {}
 
-        if (!foundOffer) {
+        if (foundOffer && (!foundOffer.status || foundOffer.status === 'active')) {
           try {
-            const localOffers = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
-            foundOffer = localOffers.find(o => 
-              o.student_email?.toLowerCase() === email.toLowerCase() && 
-              o.course_slug === slug && 
-              o.status === 'active'
-            );
+            await supabase.from('sales_offers').update({ status: 'signed_in', updated_at: new Date().toISOString() }).eq('id', foundOffer.id);
+            foundOffer.status = 'signed_in';
           } catch (e) {}
         }
         setActiveOffer(foundOffer || null);
@@ -410,6 +406,18 @@ export default function DynamicCourseDetail() {
           .insert([newP]);
   
         if (error) throw error;
+
+        // Redeem offer upon payment submission
+        if (activeOffer?.id) {
+          try {
+            await supabase.from('sales_offers').update({ status: 'redeemed', updated_at: new Date().toISOString() }).eq('id', activeOffer.id);
+          } catch (e) {}
+          try {
+            const local = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
+            const updated = local.map(o => o.id === activeOffer.id ? { ...o, status: 'redeemed' } : o);
+            window.localStorage.setItem('parhlo_sales_offers', JSON.stringify(updated));
+          } catch (e) {}
+        }
 
         // Local storage fallback for purchases
         try {

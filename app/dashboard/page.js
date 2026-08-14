@@ -160,77 +160,28 @@ export default function StudentDashboard() {
         } catch (e) {}
       }
 
-      // Check if student has any sales offers issued by sales rep (e.g. free_month_trial, added_discount)
+      // Auto-update any 'active' sales offers for this student to 'signed_in'
       try {
-        const { data: dbOffers } = await supabase
+        await supabase
           .from('sales_offers')
-          .select('*')
-          .ilike('student_email', email.trim());
-        
-        let activeOffers = (dbOffers || []).filter(o => !o.status || o.status === 'active');
+          .update({ status: 'signed_in', updated_at: new Date().toISOString() })
+          .ilike('student_email', email.trim())
+          .eq('status', 'active');
+          
         if (typeof window !== 'undefined') {
-          const local = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
-          const localActive = local.filter(o => 
-            (o.student_email || '').trim().toLowerCase() === email.trim().toLowerCase() &&
-            (!o.status || o.status === 'active')
-          );
-          localActive.forEach(lo => {
-            if (!activeOffers.some(o => o.id === lo.id)) activeOffers.push(lo);
-          });
-        }
-
-        for (const offer of activeOffers) {
-          const offerSlug = (offer.course_slug || '').trim().toLowerCase();
-          const existingApproved = purchasesList.some(p => {
-            const pSlug = (p.course_slug || '').trim().toLowerCase();
-            const st = (p.status || '').toLowerCase();
-            return pSlug === offerSlug && (['approved', 'active', 'completed', 'paid'].includes(st) || p.payment_plan === 'free_trial');
-          });
-
-          if (!existingApproved) {
-            const offerCreated = new Date(offer.created_at || Date.now());
-            const nextDueDate = new Date(offerCreated.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
-            const autoPurchase = {
-              id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'purchase_' + Date.now(),
-              student_email: email.trim().toLowerCase(),
-              course_slug: offer.course_slug,
-              status: 'approved',
-              payment_plan: offer.offer_type === 'free_month_trial' ? 'free_trial' : 'installment',
-              amount_paid: 0,
-              total_price: offer.custom_total_price || 0,
-              monthly_installment_amount: offer.custom_installment_amount || 0,
-              offer_id: offer.id,
-              next_due_date: nextDueDate,
-              created_at: offerCreated.toISOString()
-            };
-
-            try {
-              await supabase.from('purchases').upsert([autoPurchase], { onConflict: 'id' });
-            } catch (e) {
-              console.warn('DB auto purchase upsert warning:', e);
-            }
-
-            // Replace any pending purchase for this course slug with the auto-approved purchase
-            const pIndex = purchasesList.findIndex(p => (p.course_slug || '').trim().toLowerCase() === offerSlug);
-            if (pIndex !== -1) {
-              purchasesList[pIndex] = autoPurchase;
-            } else {
-              purchasesList.push(autoPurchase);
-            }
-
-            // Persist to localStorage for fallback resilience
-            if (typeof window !== 'undefined') {
-              try {
-                const localP = JSON.parse(window.localStorage.getItem('parhlo_purchases') || '[]');
-                const updatedP = localP.filter(p => (p.course_slug || '').trim().toLowerCase() !== offerSlug);
-                updatedP.push(autoPurchase);
-                window.localStorage.setItem('parhlo_purchases', JSON.stringify(updatedP));
-              } catch (e) {}
-            }
-          }
+          try {
+            const localOffers = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
+            const updatedOffers = localOffers.map(o => {
+              if ((o.student_email || '').trim().toLowerCase() === email.trim().toLowerCase() && (!o.status || o.status === 'active')) {
+                return { ...o, status: 'signed_in' };
+              }
+              return o;
+            });
+            window.localStorage.setItem('parhlo_sales_offers', JSON.stringify(updatedOffers));
+          } catch (e) {}
         }
       } catch (err) {
-        console.error('Error auto-syncing sales offers:', err);
+        console.error('Error updating offer status to signed_in:', err);
       }
 
       // Auto-sync all local storage watch history for this student to Supabase

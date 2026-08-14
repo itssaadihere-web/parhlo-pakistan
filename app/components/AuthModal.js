@@ -143,47 +143,27 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
       try {
         await supabase.from('leads').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('email', lowerEmail);
         
-        // Auto-bypass payment approval for any sales offers issued to this student email
-        const { data: activeOffers } = await supabase
+        // Update any active offers for this student email to 'signed_in'
+        await supabase
           .from('sales_offers')
-          .select('*')
+          .update({ status: 'signed_in', updated_at: new Date().toISOString() })
           .ilike('student_email', lowerEmail)
           .eq('status', 'active');
 
-        if (activeOffers && activeOffers.length > 0) {
-          for (const offer of activeOffers) {
-            const offerCreated = new Date(offer.created_at || Date.now());
-            const nextDueDate = new Date(offerCreated.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
-            const autoPurchase = {
-              id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'purchase_' + Date.now(),
-              student_email: lowerEmail,
-              course_slug: offer.course_slug,
-              status: 'approved',
-              payment_plan: offer.offer_type === 'free_month_trial' ? 'free_trial' : 'installment',
-              amount_paid: 0,
-              total_price: offer.custom_total_price || 0,
-              monthly_installment_amount: offer.custom_installment_amount || 0,
-              offer_id: offer.id,
-              next_due_date: nextDueDate,
-              created_at: offerCreated.toISOString()
-            };
-            try {
-              await supabase.from('purchases').upsert([autoPurchase], { onConflict: 'id' });
-            } catch (e) {
-              console.warn('Supabase upsert warning:', e);
-            }
-            if (typeof window !== 'undefined') {
-              try {
-                const localP = JSON.parse(window.localStorage.getItem('parhlo_purchases') || '[]');
-                const filtered = localP.filter(p => !((p.course_slug || '').trim().toLowerCase() === (offer.course_slug || '').trim().toLowerCase() && (p.student_email || '').trim().toLowerCase() === lowerEmail));
-                filtered.push(autoPurchase);
-                window.localStorage.setItem('parhlo_purchases', JSON.stringify(filtered));
-              } catch (e) {}
-            }
-          }
+        if (typeof window !== 'undefined') {
+          try {
+            const localOffers = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
+            const updatedOffers = localOffers.map(o => {
+              if ((o.student_email || '').trim().toLowerCase() === lowerEmail && (!o.status || o.status === 'active')) {
+                return { ...o, status: 'signed_in' };
+              }
+              return o;
+            });
+            window.localStorage.setItem('parhlo_sales_offers', JSON.stringify(updatedOffers));
+          } catch (e) {}
         }
       } catch (e) {
-        console.warn('Auto purchase bypass error on sign-in:', e);
+        console.warn('Sales offer status update warning on sign-in:', e);
       }
     }
     

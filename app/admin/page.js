@@ -509,6 +509,20 @@ export default function AdminDashboard() {
       calculatedDiscountedPrice = calculatedMonthlyInstallment * 3;
     }
 
+    let initialStatus = 'active';
+    try {
+      const cleanTargetEmail = studentEmail.trim().toLowerCase();
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .ilike('email', cleanTargetEmail)
+        .maybeSingle();
+
+      if (existingUser) {
+        initialStatus = 'signed_in';
+      }
+    } catch (e) {}
+
     const newOffer = {
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'offer_' + Date.now(),
       sales_email: 'admin@parhlopakistan.com.pk (Admin)',
@@ -518,7 +532,7 @@ export default function AdminDashboard() {
       discount_percent: offerType === 'independenceday_14' ? 14 : (offerType === 'added_discount' ? parseFloat(discountPercent) || 0 : 0),
       custom_installment_amount: (offerType === 'discounted_installment' || offerType === 'independenceday_14') ? calculatedMonthlyInstallment : 0,
       custom_total_price: calculatedDiscountedPrice,
-      status: 'active',
+      status: initialStatus,
       created_at: new Date().toISOString()
     };
 
@@ -1798,10 +1812,11 @@ export default function AdminDashboard() {
                           <td className="py-4 px-4 text-center">
                             <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
                               offer.status === 'redeemed' ? 'bg-purple-100 text-purple-800 border border-purple-200' :
+                              offer.status === 'signed_in' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
                               offer.status === 'expired' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
                               'bg-emerald-100 text-emerald-800 border border-emerald-200'
                             }`}>
-                              {offer.status || 'active'}
+                              {offer.status === 'signed_in' ? 'SIGNED IN' : (offer.status || 'active')}
                             </span>
                           </td>
 
