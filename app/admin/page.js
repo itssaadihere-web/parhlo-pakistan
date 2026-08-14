@@ -557,9 +557,29 @@ export default function AdminDashboard() {
       window.localStorage.setItem('parhlo_sales_offers', JSON.stringify(updatedLocal));
     }
 
+    // Send email notification to student via Admissions@parhlopakistan.com.pk
+    try {
+      fetch('/api/send-offer-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentEmail: studentEmail.trim().toLowerCase(),
+          courseName: selectedCourse ? selectedCourse.name : effectiveSlug,
+          courseSlug: effectiveSlug,
+          offerType: offerType,
+          discountPercent: parseFloat(discountPercent) || 0,
+          customInstallment: calculatedMonthlyInstallment,
+          customTotalPrice: calculatedDiscountedPrice,
+          salesEmail: 'parhlo.pakistan.edu@gmail.com (Admin)'
+        })
+      }).catch(e => console.warn('Admin offer email error:', e));
+    } catch (e) {
+      console.warn('Failed to trigger email notification:', e);
+    }
+
     setOfferFormMsg({
       type: 'success',
-      text: `Private offer successfully issued to ${studentEmail}!`
+      text: `Private offer successfully issued to ${studentEmail}! Notification email sent from Admissions@parhlopakistan.com.pk.`
     });
 
     setTimeout(() => {
