@@ -182,7 +182,10 @@ export default function SalesDashboard() {
   let calculatedDiscountedPrice = basePrice;
   let calculatedMonthlyInstallment = Math.round(basePrice / 3);
 
-  if (offerType === 'added_discount') {
+  if (offerType === 'independenceday_14') {
+    calculatedDiscountedPrice = Math.max(0, Math.round(basePrice * (1 - 14 / 100)));
+    calculatedMonthlyInstallment = Math.round(calculatedDiscountedPrice / 3);
+  } else if (offerType === 'added_discount') {
     const extraDisc = Math.min(currentUser.isAdmin ? 100 : 5, parseFloat(discountPercent) || 0);
     calculatedDiscountedPrice = Math.max(0, Math.round(basePrice * (1 - extraDisc / 100)));
     calculatedMonthlyInstallment = Math.round(calculatedDiscountedPrice / 3);
@@ -220,8 +223,8 @@ export default function SalesDashboard() {
       student_email: studentEmail.trim().toLowerCase(),
       course_slug: selectedCourseSlug,
       offer_type: offerType,
-      discount_percent: offerType === 'added_discount' ? extraDisc : 0,
-      custom_installment_amount: offerType === 'discounted_installment' ? calculatedMonthlyInstallment : 0,
+      discount_percent: offerType === 'independenceday_14' ? 14 : (offerType === 'added_discount' ? extraDisc : 0),
+      custom_installment_amount: (offerType === 'discounted_installment' || offerType === 'independenceday_14') ? calculatedMonthlyInstallment : 0,
       custom_total_price: calculatedDiscountedPrice,
       status: 'active',
       created_at: new Date().toISOString()
@@ -771,6 +774,34 @@ export default function SalesDashboard() {
                     Offer Type <span className="text-rose-500">*</span>
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {(() => {
+                      const now = new Date();
+                      const isPromoActive = now.getMonth() === 7 && now.getDate() >= 1 && now.getDate() <= 14;
+                      if (!isPromoActive) return null;
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => setOfferType('independenceday_14')}
+                          className={`p-4 rounded-2xl border text-left flex flex-col justify-between transition-all col-span-full ${
+                            offerType === 'independenceday_14'
+                              ? 'bg-emerald-100/80 border-emerald-600 text-emerald-950 font-bold shadow-sm ring-2 ring-emerald-500/20'
+                              : 'bg-emerald-50/50 border-emerald-300 text-emerald-900 hover:border-emerald-500'
+                          }`}
+                        >
+                          <div className="flex justify-between items-center w-full mb-1">
+                            <span className="font-black text-sm flex items-center gap-1.5 text-emerald-900">
+                              🇵🇰 14% Independence Day Special Discount
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-600 text-white">
+                              Active Promo (Aug 1-14)
+                            </span>
+                          </div>
+                          <div className="text-xs text-emerald-800 opacity-90 font-medium">
+                            Special 14% Independence Day discount. Automatically calculates 14% off total price & adjusts 3-month installments.
+                          </div>
+                        </button>
+                      );
+                    })()}
                     
                     <button
                       type="button"
@@ -961,6 +992,7 @@ export default function SalesDashboard() {
                           <div>
                             <span className="text-gray-400 block text-[10px] uppercase font-bold">Offer Type:</span>
                             <span className="font-bold text-slate-800 capitalize">
+                              {offer.offer_type === 'independenceday_14' && '🇵🇰 14% Independence Day Discount'}
                               {offer.offer_type === 'added_discount' && `${offer.discount_percent}% Added Discount`}
                               {offer.offer_type === 'free_month_trial' && `1-Month Free Access (0 PKR)`}
                               {offer.offer_type === 'discounted_installment' && `Custom Monthly Installments`}

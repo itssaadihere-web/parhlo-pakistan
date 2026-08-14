@@ -702,6 +702,11 @@ export default function DynamicCourseDetail() {
                     <span className="text-xs text-emerald-200">Issued by {activeOffer.sales_email}</span>
                   </div>
                   <h4 className="font-black text-lg text-white">Special Private Offer Just For You!</h4>
+                  {activeOffer.offer_type === 'independenceday_14' && (
+                    <p className="text-xs text-emerald-100">
+                      🇵🇰 <strong>14% Independence Day Special Discount Applied!</strong> Discounted Total: <strong>Rs. {activeOffer.custom_total_price?.toLocaleString()}</strong> | Monthly Installment: <strong>Rs. {activeOffer.custom_installment_amount?.toLocaleString()} / mo</strong>
+                    </p>
+                  )}
                   {activeOffer.offer_type === 'added_discount' && (
                     <p className="text-xs text-emerald-100">
                       You have received an additional <strong>{activeOffer.discount_percent}% discount</strong> on this course.
@@ -744,7 +749,7 @@ export default function DynamicCourseDetail() {
                     >
                       <p className="text-sm font-bold text-gray-900 mb-1">Pay in Full</p>
                       <p className="text-xs text-green-600 font-bold">
-                        {activeOffer?.offer_type === 'added_discount' ? formatCurrency(activeOffer.custom_total_price) : courseData.salePrice}
+                        {(activeOffer?.offer_type === 'added_discount' || activeOffer?.offer_type === 'independenceday_14') ? formatCurrency(activeOffer.custom_total_price) : courseData.salePrice}
                       </p>
                     </div>
                     <div 
@@ -753,7 +758,7 @@ export default function DynamicCourseDetail() {
                     >
                       <p className="text-sm font-bold text-gray-900 mb-1">3 Installments</p>
                       <p className="text-xs text-green-600 font-bold">
-                        Rs. {activeOffer?.offer_type === 'discounted_installment' ? activeOffer.custom_installment_amount?.toLocaleString() : Math.round(courseData.rawOriginalPrice / 3).toLocaleString()} /mo
+                        Rs. {(activeOffer?.offer_type === 'discounted_installment' || activeOffer?.offer_type === 'independenceday_14') ? activeOffer.custom_installment_amount?.toLocaleString() : Math.round(courseData.rawOriginalPrice / 3).toLocaleString()} /mo
                       </p>
                     </div>
                   </div>
@@ -761,8 +766,8 @@ export default function DynamicCourseDetail() {
                   <p className="text-gray-500 mb-8 text-sm font-medium">
                     Send <span className="font-bold text-gray-900 text-lg">
                       {paymentMode === 'full' 
-                        ? (activeOffer?.offer_type === 'added_discount' ? formatCurrency(activeOffer.custom_total_price) : courseData.salePrice)
-                        : `Rs. ${activeOffer?.offer_type === 'discounted_installment' ? activeOffer.custom_installment_amount?.toLocaleString() : Math.round(courseData.rawOriginalPrice / 3).toLocaleString()}`
+                        ? ((activeOffer?.offer_type === 'added_discount' || activeOffer?.offer_type === 'independenceday_14') ? formatCurrency(activeOffer.custom_total_price) : courseData.salePrice)
+                        : `Rs. ${(activeOffer?.offer_type === 'discounted_installment' || activeOffer?.offer_type === 'independenceday_14') ? activeOffer.custom_installment_amount?.toLocaleString() : Math.round(courseData.rawOriginalPrice / 3).toLocaleString()}`
                       }
                     </span> to the details below.
                   </p>

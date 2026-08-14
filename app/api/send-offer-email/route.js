@@ -40,7 +40,25 @@ export async function POST(req) {
     let offerSummaryTitle = 'Private Student Offer';
     let offerDetailsHtml = '';
 
-    if (offerType === 'free_month_trial') {
+    if (offerType === 'independenceday_14') {
+      offerSummaryTitle = '🇵🇰 14% Independence Day Special Discount';
+      offerDetailsHtml = `
+        <div style="background-color: #f0fdf4; border-left: 4px solid #16a34a; padding: 18px; margin: 20px 0; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+          <h2 style="margin: 0 0 10px 0; color: #15803d; font-size: 18px;">🇵🇰 Happy Independence Day! 🎉</h2>
+          <p style="margin: 0 0 12px 0; color: #166534; font-size: 14px; line-height: 1.6;">
+            To celebrate Independence Day, an exclusive <strong>14% Independence Day Special Discount</strong> has been issued for your account by representative <strong>${salesEmail || 'Admissions Team'}</strong>!
+          </p>
+          <div style="background-color: #ffffff; padding: 12px 16px; border-radius: 8px; border: 1px solid #dcfce7;">
+            <p style="margin: 0 0 6px 0; color: #15803d; font-size: 14px;">
+              🏷️ Discounted Total Price: <strong>Rs. ${Number(customTotalPrice).toLocaleString()}</strong> (14% Off)
+            </p>
+            <p style="margin: 0; color: #15803d; font-size: 14px;">
+              💳 Adjusted Monthly Installment: <strong>Rs. ${Number(customInstallment).toLocaleString()} / month</strong>
+            </p>
+          </div>
+        </div>
+      `;
+    } else if (offerType === 'free_month_trial') {
       offerSummaryTitle = '1-Month Free Access Trial';
       offerDetailsHtml = `
         <div style="background-color: #f0fdf4; border-left: 4px solid #16a34a; padding: 16px; margin: 20px 0; border-radius: 8px;">
@@ -143,7 +161,9 @@ export async function POST(req) {
       from: `"Parhlo Pakistan Admissions" <${smtpUser}>`,
       to: studentEmail.trim().toLowerCase(),
       replyTo: salesEmail && salesEmail.includes('@') ? salesEmail : smtpUser,
-      subject: `🎉 Exclusive Private Offer Issued: ${courseName || 'Parhlo Pakistan'}`,
+      subject: offerType === 'independenceday_14'
+        ? `🇵🇰 Happy Independence Day! 14% Special Discount Issued - ${courseName || 'Parhlo Pakistan'}`
+        : `🎉 Exclusive Private Offer Issued: ${courseName || 'Parhlo Pakistan'}`,
       html: htmlContent
     };
 

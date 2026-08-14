@@ -494,7 +494,10 @@ export default function AdminDashboard() {
     let calculatedDiscountedPrice = basePrice;
     let calculatedMonthlyInstallment = Math.round(basePrice / 3);
 
-    if (offerType === 'added_discount') {
+    if (offerType === 'independenceday_14') {
+      calculatedDiscountedPrice = Math.max(0, Math.round(basePrice * (1 - 14 / 100)));
+      calculatedMonthlyInstallment = Math.round(calculatedDiscountedPrice / 3);
+    } else if (offerType === 'added_discount') {
       const extraDisc = parseFloat(discountPercent) || 0;
       calculatedDiscountedPrice = Math.max(0, Math.round(basePrice * (1 - extraDisc / 100)));
       calculatedMonthlyInstallment = Math.round(calculatedDiscountedPrice / 3);
@@ -512,8 +515,8 @@ export default function AdminDashboard() {
       student_email: studentEmail.trim().toLowerCase(),
       course_slug: effectiveSlug,
       offer_type: offerType,
-      discount_percent: offerType === 'added_discount' ? parseFloat(discountPercent) || 0 : 0,
-      custom_installment_amount: offerType === 'discounted_installment' ? calculatedMonthlyInstallment : 0,
+      discount_percent: offerType === 'independenceday_14' ? 14 : (offerType === 'added_discount' ? parseFloat(discountPercent) || 0 : 0),
+      custom_installment_amount: (offerType === 'discounted_installment' || offerType === 'independenceday_14') ? calculatedMonthlyInstallment : 0,
       custom_total_price: calculatedDiscountedPrice,
       status: 'active',
       created_at: new Date().toISOString()
@@ -1815,6 +1818,7 @@ export default function AdminDashboard() {
                               <button
                                 onClick={() => {
                                   const text = `Private Offer Details:\nTarget Student: ${offer.student_email}\nCourse: ${courseTitle}\nIssued By: ${issuerName}\nOffer Details: ${
+                                    offer.offer_type === 'independenceday_14' ? `🇵🇰 14% Independence Day Discount (Rs. ${offer.custom_total_price})` :
                                     offer.offer_type === 'added_discount' ? `${offer.discount_percent}% Discount (Rs. ${offer.custom_total_price})` :
                                     offer.offer_type === 'free_month_trial' ? '1-Month Free Access' :
                                     `Rs. ${offer.custom_installment_amount}/mo Installments`
@@ -2775,6 +2779,13 @@ export default function AdminDashboard() {
                   onChange={(e) => setNewOfferData({ ...newOfferData, offerType: e.target.value })}
                   className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
+                  {(() => {
+                    const now = new Date();
+                    if (now.getMonth() === 7 && now.getDate() >= 1 && now.getDate() <= 14) {
+                      return <option value="independenceday_14">🇵🇰 14% Independence Day Special Discount (Active Aug 1-14)</option>;
+                    }
+                    return null;
+                  })()}
                   <option value="added_discount">Percentage Discount (Extra % Off)</option>
                   <option value="free_month_trial">1-Month Free Access (Delayed 1st Installment)</option>
                   <option value="discounted_installment">Discounted Monthly Installment Rate</option>
