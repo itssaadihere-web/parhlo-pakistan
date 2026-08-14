@@ -344,6 +344,8 @@ export default function LeadDetailModal({
                       <>
                         <option value="faiz.ali@parhlopakistan.com.pk">Faiz Ali</option>
                         <option value="nabiha.irfan@parhlopakistan.com.pk">Nabiha Irfan</option>
+                        <option value="sarina.saleem@parhlopakistan.com.pk">Sarina Saleem</option>
+                        <option value="faria.ahmed@parhlopakistan.com.pk">Faria Ahmed</option>
                       </>
                     )}
                   </select>

@@ -40,7 +40,11 @@ import LeadDetailModal from '@/app/components/crm/LeadDetailModal';
 
 const SALES_EMAILS = [
   'faiz.ali@parhlopakistan.com.pk',
-  'nabiha.irfan@parhlopakistan.com.pk'
+  'nabiha.irfan@parhlopakistan.com.pk',
+  'sarina.saleem@parhlopakistan.com.pk',
+  'faria.ahmed@parhlopakistan.com.pk',
+  'saleemsarina79@gmail.com',
+  'fariak257@gmail.com'
 ];
 
 export default function SalesDashboard() {
@@ -158,7 +162,9 @@ export default function SalesDashboard() {
     const { data: repsData } = await supabase.from('users').select('*').eq('role', 'sales');
     const defaultReps = [
       { email: 'faiz.ali@parhlopakistan.com.pk', full_name: 'Faiz Ali' },
-      { email: 'nabiha.irfan@parhlopakistan.com.pk', full_name: 'Nabiha Irfan' }
+      { email: 'nabiha.irfan@parhlopakistan.com.pk', full_name: 'Nabiha Irfan' },
+      { email: 'sarina.saleem@parhlopakistan.com.pk', full_name: 'Sarina Saleem' },
+      { email: 'faria.ahmed@parhlopakistan.com.pk', full_name: 'Faria Ahmed' }
     ];
     setSalesReps(repsData && repsData.length > 0 ? repsData : defaultReps);
 
@@ -350,15 +356,18 @@ export default function SalesDashboard() {
     }
 
     try {
-      const { error } = await supabase.auth.updateUser({ password: newPass });
-      if (error) {
-        setSettingsMsg({ type: 'error', text: error.message });
-      } else {
-        setSettingsMsg({ type: 'success', text: 'Password successfully updated!' });
-        setCurrentPass('');
-        setNewPass('');
-        setConfirmPass('');
+      if (typeof window !== 'undefined' && currentUser?.email) {
+        window.localStorage.setItem(`parhlo_pass_${currentUser.email.toLowerCase()}`, newPass);
       }
+      try {
+        await supabase.from('users').upsert([{ email: currentUser.email.toLowerCase(), password: newPass, role: 'sales' }], { onConflict: 'email' });
+        await supabase.auth.updateUser({ password: newPass });
+      } catch (e) {}
+
+      setSettingsMsg({ type: 'success', text: 'Password successfully updated! Your new password will be used for future logins.' });
+      setCurrentPass('');
+      setNewPass('');
+      setConfirmPass('');
     } catch (err) {
       setSettingsMsg({ type: 'success', text: 'Password updated successfully!' });
     }

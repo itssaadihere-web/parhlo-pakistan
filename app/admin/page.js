@@ -300,7 +300,9 @@ export default function AdminDashboard() {
     const { data: repsData } = await supabase.from('users').select('*').eq('role', 'sales');
     const defaultReps = [
       { email: 'faiz.ali@parhlopakistan.com.pk', full_name: 'Faiz Ali' },
-      { email: 'nabiha.irfan@parhlopakistan.com.pk', full_name: 'Nabiha Irfan' }
+      { email: 'nabiha.irfan@parhlopakistan.com.pk', full_name: 'Nabiha Irfan' },
+      { email: 'sarina.saleem@parhlopakistan.com.pk', full_name: 'Sarina Saleem' },
+      { email: 'faria.ahmed@parhlopakistan.com.pk', full_name: 'Faria Ahmed' }
     ];
     setSalesReps(repsData && repsData.length > 0 ? repsData : defaultReps);
 
@@ -1650,6 +1652,8 @@ export default function AdminDashboard() {
                     <option value="all">All Sales Issuers (Who)</option>
                     <option value="faiz.ali@parhlopakistan.com.pk">Faiz Ali</option>
                     <option value="nabiha.irfan@parhlopakistan.com.pk">Nabiha Irfan</option>
+                    <option value="sarina.saleem@parhlopakistan.com.pk">Sarina Saleem</option>
+                    <option value="faria.ahmed@parhlopakistan.com.pk">Faria Ahmed</option>
                     <option value="admin">Admin Issued Only</option>
                   </select>
 
@@ -1699,11 +1703,12 @@ export default function AdminDashboard() {
                       const courseTitle = matchedCourse ? matchedCourse.name : offer.course_slug;
                       const rawPrice = matchedCourse ? parsePrice(matchedCourse.price) : 0;
                       
-                      const isFaiz = offer.sales_email?.toLowerCase().includes('faiz');
-                      const isNabiha = offer.sales_email?.toLowerCase().includes('nabiha');
-                      const isAdminIssuer = offer.sales_email?.toLowerCase().includes('admin');
-
-                      const issuerName = isFaiz ? 'Faiz Ali' : isNabiha ? 'Nabiha Irfan' : isAdminIssuer ? 'Admin Portal' : offer.sales_email;
+                      const emailLower = (offer.sales_email || '').toLowerCase();
+                      const issuerName = emailLower.includes('faiz') ? 'Faiz Ali' :
+                        emailLower.includes('nabiha') ? 'Nabiha Irfan' :
+                        emailLower.includes('sarina') ? 'Sarina Saleem' :
+                        emailLower.includes('faria') ? 'Faria Ahmed' :
+                        emailLower.includes('admin') ? 'Admin Portal' : offer.sales_email;
 
                       const createdDate = new Date(offer.created_at || Date.now());
                       const dateFormatted = createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });

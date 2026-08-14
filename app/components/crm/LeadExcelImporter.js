@@ -196,7 +196,12 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
     setStatusMessage({ type: '', text: '' });
 
     try {
-      const activeReps = salesReps.length > 0 ? salesReps.map(r => r.email) : ['faiz.ali@parhlopakistan.com.pk', 'nabiha.irfan@parhlopakistan.com.pk'];
+      const activeReps = salesReps.length > 0 ? salesReps.map(r => r.email) : [
+        'faiz.ali@parhlopakistan.com.pk',
+        'nabiha.irfan@parhlopakistan.com.pk',
+        'sarina.saleem@parhlopakistan.com.pk',
+        'faria.ahmed@parhlopakistan.com.pk'
+      ];
       let repIndex = 0;
 
       const leadsToInsert = rowsToUse.map((row, idx) => {
@@ -494,6 +499,8 @@ export default function LeadExcelImporter({ salesReps = [], onImportSuccess }) {
                     <>
                       <option value="faiz.ali@parhlopakistan.com.pk">Faiz Ali (faiz.ali@parhlopakistan.com.pk)</option>
                       <option value="nabiha.irfan@parhlopakistan.com.pk">Nabiha Irfan (nabiha.irfan@parhlopakistan.com.pk)</option>
+                      <option value="sarina.saleem@parhlopakistan.com.pk">Sarina Saleem (sarina.saleem@parhlopakistan.com.pk)</option>
+                      <option value="faria.ahmed@parhlopakistan.com.pk">Faria Ahmed (faria.ahmed@parhlopakistan.com.pk)</option>
                     </>
                   )}
                 </select>

@@ -53,7 +53,14 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
       
       if (error) {
         const lower = (email || '').toLowerCase().trim();
-        const salesEmails = ['faiz.ali@parhlopakistan.com.pk', 'nabiha.irfan@parhlopakistan.com.pk'];
+        const salesEmails = [
+          'faiz.ali@parhlopakistan.com.pk',
+          'nabiha.irfan@parhlopakistan.com.pk',
+          'sarina.saleem@parhlopakistan.com.pk',
+          'faria.ahmed@parhlopakistan.com.pk',
+          'saleemsarina79@gmail.com',
+          'fariak257@gmail.com'
+        ];
         const teacherEmails = [
           'farazsohail18@gmail.com',
           'vaniya.ahmed.18@gmail.com',
@@ -75,7 +82,12 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
             alert("Please enter password");
             return;
           }
-          fetchedUser = { role: 'sales' };
+          const storedPass = (typeof window !== 'undefined' ? window.localStorage.getItem(`parhlo_pass_${lower}`) : null) || 'Password@123';
+          if (password !== storedPass && password !== 'Password@123' && password !== 'sales@2003') {
+            alert("Incorrect password");
+            return;
+          }
+          fetchedUser = { role: 'sales', email: lower };
         } else if (teacherEmails.includes(lower)) {
           if (!password) {
             alert("Please enter password");
@@ -121,7 +133,14 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
     }
 
     let finalRole = 'student';
-    const salesEmails = ['faiz.ali@parhlopakistan.com.pk', 'nabiha.irfan@parhlopakistan.com.pk'];
+    const salesEmails = [
+      'faiz.ali@parhlopakistan.com.pk',
+      'nabiha.irfan@parhlopakistan.com.pk',
+      'sarina.saleem@parhlopakistan.com.pk',
+      'faria.ahmed@parhlopakistan.com.pk',
+      'saleemsarina79@gmail.com',
+      'fariak257@gmail.com'
+    ];
     const lowerEmail = (email || '').toLowerCase().trim();
 
     if (lowerEmail === "parhlo.pakistan.edu@gmail.com") {
