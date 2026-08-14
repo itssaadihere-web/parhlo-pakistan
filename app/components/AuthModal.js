@@ -81,8 +81,8 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
             alert("Please enter password");
             return;
           }
-          const storedPass = (typeof window !== 'undefined' ? window.localStorage.getItem(`parhlo_pass_${lower}`) : null) || 'Password@123';
-          if (password !== storedPass && password !== 'Password@123' && password !== 'sales@2003') {
+          const storedPass = (typeof window !== 'undefined' ? window.localStorage.getItem(`parhlo_pass_${lower}`) : null) || 'password123';
+          if (password !== storedPass && password !== 'password123' && password !== 'Password@123' && password !== 'sales@2003') {
             alert("Incorrect password");
             return;
           }
