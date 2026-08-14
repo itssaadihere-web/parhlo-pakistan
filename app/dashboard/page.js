@@ -233,6 +233,53 @@ export default function StudentDashboard() {
         console.error('Error auto-syncing sales offers:', err);
       }
 
+      // Auto-sync all local storage watch history for this student to Supabase
+      if (typeof window !== 'undefined' && email) {
+        try {
+          const syncRows = [];
+          const cleanUserEmail = email.trim().toLowerCase();
+
+          for (let i = 0; i < window.localStorage.length; i++) {
+            const key = window.localStorage.key(i);
+            if (key && key.startsWith('parhlo_watch_')) {
+              const parts = key.split('_');
+              if (parts.length >= 4) {
+                const keyEmail = parts[2].trim().toLowerCase();
+                const courseSlug = parts.slice(3).join('_').trim().toLowerCase();
+
+                if (keyEmail === cleanUserEmail || keyEmail.includes(cleanUserEmail) || cleanUserEmail.includes(keyEmail)) {
+                  try {
+                    const watchMap = JSON.parse(window.localStorage.getItem(key) || '{}');
+                    if (typeof watchMap === 'object' && watchMap !== null) {
+                      Object.keys(watchMap).forEach(lecId => {
+                        const sec = Number(watchMap[lecId]) || 0;
+                        if (sec > 0) {
+                          syncRows.push({
+                            student_email: cleanUserEmail,
+                            course_slug: courseSlug,
+                            lecture_id: String(lecId),
+                            watched_seconds: sec,
+                            last_watched_at: new Date().toISOString()
+                          });
+                        }
+                      });
+                    }
+                  } catch (e) {}
+                }
+              }
+            }
+          }
+
+          if (syncRows.length > 0) {
+            await supabase
+              .from('user_video_progress')
+              .upsert(syncRows, { onConflict: 'student_email,course_slug,lecture_id' });
+          }
+        } catch (e) {
+          console.warn('Dashboard watch history sync warning:', e);
+        }
+      }
+
       // Fetch user video progress from Supabase
       let dbVideoProgressList = [];
       try {
