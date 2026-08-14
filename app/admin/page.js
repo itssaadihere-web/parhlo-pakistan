@@ -1542,13 +1542,6 @@ export default function AdminDashboard() {
                 >
                   <PlusCircle size={18} /> Issue Admin Private Offer
                 </button>
-                <Link
-                  href="/sales"
-                  target="_blank"
-                  className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 rounded-2xl font-black text-sm shadow-md flex items-center gap-2 transition-all"
-                >
-                  <Tag size={18} /> Open Sales Portal
-                </Link>
               </div>
             </div>
 
