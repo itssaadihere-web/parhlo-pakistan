@@ -390,6 +390,11 @@ export default function DynamicCourseDetail() {
       } else {
         // New purchase
         const cleanEmail = (userEmail || window.localStorage.getItem('currentUserEmail') || '').trim().toLowerCase();
+        
+        const origPrice = activeOffer?.custom_total_price || courseData?.rawSalePrice || courseData?.rawOriginalPrice || 7000;
+        const calcMonthly = activeOffer?.custom_installment_amount || Math.round(origPrice / 3);
+        const calcPaid = paymentMode === 'installment' ? calcMonthly : origPrice;
+
         const newP = {
           id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'purchase_' + Date.now(),
           student_email: cleanEmail,
@@ -397,7 +402,11 @@ export default function DynamicCourseDetail() {
           status: 'pending',
           payment_screenshot_url: receiptImage,
           payment_plan: paymentMode,
-          installments_paid: paymentMode === 'installment' ? 0 : 1,
+          installments_paid: paymentMode === 'installment' ? 1 : 1,
+          monthly_installment_amount: calcMonthly,
+          total_price: origPrice,
+          amount_paid: calcPaid,
+          offer_id: activeOffer?.id || null,
           created_at: new Date().toISOString()
         };
 
