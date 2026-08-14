@@ -1063,7 +1063,7 @@ export default function AdminDashboard() {
               <div className="col-span-2 bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm">
                 <h3 className="text-xl font-black mb-6">Recent Activity</h3>
                 <div className="space-y-6">
-                  {payments.filter(isRealPayment).slice(-4).reverse().map((activity, i) => (
+                  {payments.filter(isRealPayment).slice(-6).reverse().map((activity, i) => (
                     <div key={i} className="flex justify-between items-center pb-6 border-b border-gray-50 last:border-0">
                       <div className="flex gap-4 items-center">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center ${activity.status === 'approved' ? 'bg-green-50 text-green-600' : 'bg-amber-50 text-amber-600'}`}>
@@ -1076,7 +1076,17 @@ export default function AdminDashboard() {
                           <p className="text-xs text-gray-400">{activity.userEmail} • {activity.courseName}</p>
                         </div>
                       </div>
-                      <span className="text-[10px] font-black text-gray-400">{activity.date}</span>
+                      <div className="flex items-center gap-3">
+                        {activity.receiptImage && (
+                          <button
+                            onClick={() => setViewingReceipt(activity.receiptImage)}
+                            className="text-xs font-bold text-blue-600 hover:text-blue-800 underline"
+                          >
+                            View Receipt
+                          </button>
+                        )}
+                        <span className="text-[10px] font-black text-gray-400">{activity.date}</span>
+                      </div>
                     </div>
                   ))}
                   {payments.length === 0 && (
@@ -2195,6 +2205,12 @@ export default function AdminDashboard() {
                         >
                           View Profile
                         </button>
+                        <button
+                          onClick={() => payment.receiptImage ? setViewingReceipt(payment.receiptImage) : alert('No receipt was attached to this payment.')}
+                          className={`text-xs font-bold underline ${payment.receiptImage ? 'text-blue-600 hover:text-blue-800' : 'text-gray-400 cursor-not-allowed'}`}
+                        >
+                          View Receipt
+                        </button>
                         <span className="text-xs font-black text-green-600 uppercase tracking-widest bg-green-50 px-3 py-1 rounded-full">Approved</span>
                       </div>
                     </div>
@@ -2659,7 +2675,15 @@ export default function AdminDashboard() {
                             {course.nextDueDate && ` • Next Due: ${new Date(course.nextDueDate).toLocaleDateString()}`}
                           </p>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-2">
+                          {course.receiptImage && (
+                            <button
+                              onClick={() => setViewingReceipt(course.receiptImage)}
+                              className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg transition-colors"
+                            >
+                              View Receipt
+                            </button>
+                          )}
                           <button 
                             onClick={() => handleToggleAccess(course.id, course.status)}
                             className={`text-xs font-bold px-4 py-2 rounded-lg transition-colors ${course.status === 'approved' ? 'text-orange-600 hover:text-orange-800 bg-orange-50 hover:bg-orange-100' : 'text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100'}`}
