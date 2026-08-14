@@ -463,14 +463,14 @@ export default function StudentDashboard() {
     <div className="flex min-h-screen bg-[#F8FAFC] font-sans text-slate-900">
       <InactivityTracker onLogout={handleLogout} timeoutMs={15 * 60 * 1000} />
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-100 flex flex-col hidden md:flex">
-        <div className="p-6 flex items-center gap-3 border-b border-gray-50">
+      <aside className="w-64 bg-white border-r border-gray-100 hidden md:flex flex-col h-screen sticky top-0 flex-shrink-0 z-30 shadow-sm">
+        <div className="p-6 flex items-center gap-3 border-b border-gray-50 flex-shrink-0">
           <Link href="/">
             <img src="/logo.png" alt="Logo" className="h-10 cursor-pointer logo-outline" />
           </Link>
         </div>
         
-        <div className="p-6 flex items-center gap-4">
+        <div className="p-6 flex items-center gap-4 flex-shrink-0">
           <div className="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center font-black text-xl uppercase">
             {studentName.charAt(0)}
           </div>
@@ -480,7 +480,7 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        <nav className="flex-1 px-4 space-y-2 mt-2">
+        <nav className="flex-1 px-4 space-y-2 mt-2 overflow-y-auto min-h-0">
           {menuItems.map((item) => (
             <button
               key={item.id}
@@ -495,16 +495,18 @@ export default function StudentDashboard() {
             </button>
           ))}
         </nav>
-        <button 
-          onClick={handleLogout} 
-          className="m-6 flex items-center gap-3 px-4 py-3 text-gray-500 font-bold text-sm hover:text-red-600 transition-colors rounded-xl hover:bg-red-50"
-        >
-          <LogOut size={20} /> Sign Out
-        </button>
+        <div className="p-4 border-t border-gray-100 flex-shrink-0 bg-white">
+          <button 
+            onClick={handleLogout} 
+            className="w-full flex items-center gap-3 px-4 py-3 text-gray-500 font-bold text-sm hover:text-red-600 transition-colors rounded-xl hover:bg-red-50"
+          >
+            <LogOut size={20} /> Sign Out
+          </button>
+        </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-6 md:p-10 overflow-y-auto relative">
+      <main className="flex-1 p-6 md:p-10 overflow-y-auto min-h-screen relative">
         {/* Mobile Header */}
         <div className="md:hidden flex justify-between items-center mb-8 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
           <div className="flex items-center gap-3">
@@ -521,17 +523,17 @@ export default function StudentDashboard() {
             <aside className="w-64 bg-white border-r border-gray-100 flex flex-col h-full relative z-10 shadow-2xl transition-transform">
               <button 
                 onClick={() => setIsMobileMenuOpen(false)} 
-                className="absolute top-6 right-6 text-gray-400 hover:text-gray-900"
+                className="absolute top-6 right-6 text-gray-400 hover:text-gray-900 z-10"
               >
                 <X size={24} />
               </button>
-              <div className="p-6 flex items-center gap-3 border-b border-gray-50">
+              <div className="p-6 flex items-center gap-3 flex-shrink-0 border-b border-gray-50">
                 <Link href="/">
                   <img src="/logo.png" alt="Logo" className="h-10 cursor-pointer logo-outline" />
                 </Link>
               </div>
               
-              <div className="p-6 flex items-center gap-4">
+              <div className="p-6 flex items-center gap-4 flex-shrink-0">
                 <div className="w-12 h-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center font-black text-xl uppercase">
                   {studentName.charAt(0)}
                 </div>
@@ -541,7 +543,7 @@ export default function StudentDashboard() {
                 </div>
               </div>
 
-              <nav className="flex-1 px-4 space-y-2 mt-2">
+              <nav className="flex-1 px-4 space-y-2 mt-2 overflow-y-auto min-h-0">
                 {menuItems.map((item) => (
                   <button
                     key={item.id}
@@ -556,12 +558,14 @@ export default function StudentDashboard() {
                   </button>
                 ))}
               </nav>
-              <button 
-                onClick={handleLogout} 
-                className="m-6 flex items-center gap-3 px-4 py-3 text-gray-500 font-bold text-sm hover:text-red-600 transition-colors rounded-xl hover:bg-red-50"
-              >
-                <LogOut size={20} /> Sign Out
-              </button>
+              <div className="p-4 border-t border-gray-100 flex-shrink-0 bg-white">
+                <button 
+                  onClick={handleLogout} 
+                  className="w-full flex items-center gap-3 px-4 py-3 text-gray-500 font-bold text-sm hover:text-red-600 transition-colors rounded-xl hover:bg-red-50"
+                >
+                  <LogOut size={20} /> Sign Out
+                </button>
+              </div>
             </aside>
           </div>
         )}
