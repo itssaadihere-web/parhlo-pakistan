@@ -42,9 +42,7 @@ const SALES_EMAILS = [
   'faiz.ali@parhlopakistan.com.pk',
   'nabiha.irfan@parhlopakistan.com.pk',
   'sarina.saleem@parhlopakistan.com.pk',
-  'faria.ahmed@parhlopakistan.com.pk',
-  'saleemsarina79@gmail.com',
-  'fariak257@gmail.com'
+  'faria.ahmed@parhlopakistan.com.pk'
 ];
 
 export default function SalesDashboard() {

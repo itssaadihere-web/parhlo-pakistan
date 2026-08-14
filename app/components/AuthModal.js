@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useState } from 'react';
-import { X, Mail, Lock, User } from 'lucide-react';
+import { X, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../../utils/supabase';
 
 export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLoginSuccess }) {
   const [authMode, setAuthMode] = useState(initialMode);
+  const [showPassword, setShowPassword] = useState(false);
 
   if (!isOpen) return null;
 
@@ -57,9 +58,7 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
           'faiz.ali@parhlopakistan.com.pk',
           'nabiha.irfan@parhlopakistan.com.pk',
           'sarina.saleem@parhlopakistan.com.pk',
-          'faria.ahmed@parhlopakistan.com.pk',
-          'saleemsarina79@gmail.com',
-          'fariak257@gmail.com'
+          'faria.ahmed@parhlopakistan.com.pk'
         ];
         const teacherEmails = [
           'farazsohail18@gmail.com',
@@ -137,9 +136,7 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
       'faiz.ali@parhlopakistan.com.pk',
       'nabiha.irfan@parhlopakistan.com.pk',
       'sarina.saleem@parhlopakistan.com.pk',
-      'faria.ahmed@parhlopakistan.com.pk',
-      'saleemsarina79@gmail.com',
-      'fariak257@gmail.com'
+      'faria.ahmed@parhlopakistan.com.pk'
     ];
     const lowerEmail = (email || '').toLowerCase().trim();
 
@@ -256,7 +253,21 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
           </div>
           <div className="relative">
             <Lock className="absolute left-4 top-4 text-gray-400" size={20} />
-            <input name="password" type="password" required placeholder="Password" className="w-full bg-gray-50 border border-gray-200 p-4 pl-12 rounded-xl outline-none focus:ring-2 focus:ring-green-500 transition-all font-medium" />
+            <input 
+              name="password" 
+              type={showPassword ? "text" : "password"} 
+              required 
+              placeholder="Password" 
+              className="w-full bg-gray-50 border border-gray-200 p-4 pl-12 pr-12 rounded-xl outline-none focus:ring-2 focus:ring-green-500 transition-all font-medium" 
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+            </button>
           </div>
 
           <button type="submit" className="w-full bg-gray-900 text-white py-4 rounded-xl font-black hover:bg-green-600 transition-all shadow-xl mt-4 uppercase tracking-wider">
