@@ -289,7 +289,9 @@ export default function DynamicCourseDetail() {
           curriculum: adminCourse.lectures?.map((lecture, idx) => ({
             id: idx + 1,
             title: lecture.title || `Lecture ${idx + 1}`,
-            duration: lecture.duration || (lecture.type === 'quiz' ? 'Quiz' : '25 min'),
+            duration: (!lecture.duration || lecture.duration === 'Unknown' || lecture.duration === 'N/A') 
+              ? (lecture.type === 'quiz' ? 'Quiz' : '15 min') 
+              : lecture.duration,
             isFree: lecture.type === 'demo',
             videoId: lecture.videoId || '',
             url: lecture.url || '',
@@ -1021,7 +1023,9 @@ export default function DynamicCourseDetail() {
                       <h4 className="text-lg font-bold text-gray-900 tracking-tight">
                         {idx + 1}. {item.title}
                       </h4>
-                      <span className="text-xs font-bold text-gray-400 flex items-center gap-1.5"><Clock size={12} /> {item.duration}</span>
+                      <span className="text-xs font-bold text-gray-400 flex items-center gap-1.5">
+                        <Clock size={12} /> {(!item.duration || item.duration === 'Unknown' || item.duration === 'N/A') ? (item.type === 'quiz' ? 'Quiz' : '15 min') : item.duration}
+                      </span>
                     </div>
                     <p className="text-sm text-gray-500 font-medium leading-relaxed max-w-md">{item.sub}</p>
                   </div>
