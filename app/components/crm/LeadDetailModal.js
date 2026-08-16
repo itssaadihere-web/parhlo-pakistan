@@ -177,15 +177,24 @@ export default function LeadDetailModal({
         {/* Modal Header */}
         <div className="p-6 md:p-8 bg-slate-900 text-white flex justify-between items-start border-b border-slate-800">
           <div className="space-y-1">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <h2 className="text-2xl font-black text-white">{currentLead.name}</h2>
               <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${currentStageObj.color}`}>
                 {currentStageObj.label}
               </span>
             </div>
-            <p className="text-slate-400 text-xs font-mono">
-              Phone: <strong className="text-emerald-400">{currentLead.phone}</strong> {currentLead.email ? `| Email: ${currentLead.email}` : ''}
-            </p>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
+              <div className="flex items-center gap-2 bg-emerald-950/60 border border-emerald-800/60 px-3 py-1 rounded-xl">
+                <span className="text-emerald-300/70 text-xs font-bold uppercase tracking-wider">Phone:</span>
+                <strong className="text-emerald-400 text-lg md:text-xl font-black font-mono tracking-wide">{currentLead.phone}</strong>
+              </div>
+              {currentLead.email && (
+                <div className="text-slate-400 text-xs font-mono flex items-center gap-1.5">
+                  <span className="text-slate-500">|</span>
+                  <span>Email: <strong className="text-slate-200 font-medium">{currentLead.email}</strong></span>
+                </div>
+              )}
+            </div>
           </div>
 
           <button

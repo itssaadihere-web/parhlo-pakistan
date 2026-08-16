@@ -220,7 +220,7 @@ export default function LeadKanbanBoard({
                             <h4 className="font-bold text-slate-900 text-sm group-hover:text-emerald-700 transition-colors">
                               {lead.name}
                             </h4>
-                            <p className="text-xs text-gray-500 font-mono mt-0.5">{lead.phone}</p>
+                            <p className="text-sm font-bold font-mono text-emerald-700 mt-0.5">{lead.phone}</p>
                             {lead.email && <p className="text-[11px] text-gray-400 truncate">{lead.email}</p>}
                           </div>
 
@@ -291,7 +291,7 @@ export default function LeadKanbanBoard({
                     className="hover:bg-emerald-50/50 cursor-pointer transition-colors"
                   >
                     <td className="p-4 font-bold">{lead.name}</td>
-                    <td className="p-4 font-mono text-emerald-700">{lead.phone}</td>
+                    <td className="p-4 font-mono font-bold text-sm text-emerald-700">{lead.phone}</td>
                     <td className="p-4 font-mono text-gray-500">{lead.email || '—'}</td>
                     <td className="p-4">
                       <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border uppercase tracking-wider ${stageObj.badge}`}>
