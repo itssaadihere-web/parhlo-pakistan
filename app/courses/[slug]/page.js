@@ -1116,17 +1116,10 @@ export default function DynamicCourseDetail() {
             <div className="hidden xl:flex flex-col items-center justify-center w-52 h-[520px] shrink-0 bg-slate-900/80 border border-slate-800 rounded-3xl p-3 text-center">
               <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase mb-2">Advertisement</span>
               <div className="w-full h-full flex flex-col items-center justify-center rounded-2xl bg-slate-950/80 border border-dashed border-slate-800 p-4 overflow-hidden">
-                <div className="w-8 h-8 rounded-full bg-green-500/10 text-green-400 flex items-center justify-center mb-2 font-bold text-xs shrink-0">
-                  Ad
-                </div>
-                <p className="text-xs font-bold text-slate-300">Left Ad Banner</p>
-                <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
-                  Google AdSense Vertical Banner
-                </p>
                 <ins className="adsbygoogle"
                      style={{ display: 'block', width: '100%', height: '100%' }}
                      data-ad-client="ca-pub-7315986629947930"
-                     data-ad-slot="LEFT_SLOT_ID"
+                     data-ad-slot="4242420306"
                      data-ad-format="auto"
                      data-full-width-responsive="true" />
               </div>
@@ -1170,17 +1163,10 @@ export default function DynamicCourseDetail() {
             <div className="hidden xl:flex flex-col items-center justify-center w-52 h-[520px] shrink-0 bg-slate-900/80 border border-slate-800 rounded-3xl p-3 text-center">
               <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase mb-2">Advertisement</span>
               <div className="w-full h-full flex flex-col items-center justify-center rounded-2xl bg-slate-950/80 border border-dashed border-slate-800 p-4 overflow-hidden">
-                <div className="w-8 h-8 rounded-full bg-green-500/10 text-green-400 flex items-center justify-center mb-2 font-bold text-xs shrink-0">
-                  Ad
-                </div>
-                <p className="text-xs font-bold text-slate-300">Right Ad Banner</p>
-                <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
-                  Google AdSense Vertical Banner
-                </p>
                 <ins className="adsbygoogle"
                      style={{ display: 'block', width: '100%', height: '100%' }}
                      data-ad-client="ca-pub-7315986629947930"
-                     data-ad-slot="RIGHT_SLOT_ID"
+                     data-ad-slot="6151961440"
                      data-ad-format="auto"
                      data-full-width-responsive="true" />
               </div>
