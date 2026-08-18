@@ -318,16 +318,19 @@ export default function ParhloPakistan() {
             </div>
             <div>
               <h4 className="font-bold text-gray-900 mb-6 uppercase tracking-wider text-xs">Quick Links</h4>
-              <ul className="space-y-4 text-gray-500 text-sm font-semibold">
-                <li><Link href="/courses" className="hover:text-green-600 cursor-pointer">Browse Subjects</Link></li>
-                <li className="hover:text-green-600 cursor-pointer">Privacy Policy</li>
+              <ul className="space-y-3 text-gray-500 text-sm font-semibold">
+                <li><Link href="/courses" className="hover:text-green-600 transition-colors">Browse Subjects</Link></li>
+                <li><Link href="/about" className="hover:text-green-600 transition-colors">About Us</Link></li>
+                <li><Link href="/privacy" className="hover:text-green-600 transition-colors">Privacy Policy</Link></li>
+                <li><Link href="/terms" className="hover:text-green-600 transition-colors">Terms of Service</Link></li>
+                <li><Link href="/contact" className="hover:text-green-600 transition-colors">Contact Us</Link></li>
               </ul>
             </div>
             <div>
               <h4 className="font-bold text-gray-900 mb-6 uppercase tracking-wider text-xs">Support</h4>
               <p className="text-gray-500 text-sm font-semibold mb-2">Need help? Contact us:</p>
-              <p className="text-gray-500 text-sm font-semibold mb-2">parhlo.pakistan.edu@gmail.com</p>
-              <p className="text-gray-500 text-sm font-semibold">📱 WhatsApp: 0330 2882822</p>
+              <a href="mailto:parhlo.pakistan.edu@gmail.com" className="text-gray-600 hover:text-green-600 text-sm font-semibold mb-2 block">parhlo.pakistan.edu@gmail.com</a>
+              <a href="https://wa.me/923302882822" target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:text-green-600 text-sm font-semibold block">📱 WhatsApp: 0330 2882822</a>
             </div>
           </div>
           <div className="pt-10 border-t border-gray-100 text-center">

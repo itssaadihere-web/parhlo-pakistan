@@ -296,6 +296,14 @@ export default function AllCourses() {
       <footer className="bg-white border-t border-gray-200 pt-16 pb-10 mt-20">
         <div className="max-w-6xl mx-auto px-8 text-center">
            <img src="/logo.png" alt="Logo" className="h-16 mb-6 mx-auto logo-outline" loading="lazy" decoding="async" />
+           
+           <div className="flex flex-wrap justify-center items-center gap-6 mb-6 text-sm font-semibold text-gray-500">
+             <Link href="/about" className="hover:text-green-600 transition-colors">About Us</Link>
+             <Link href="/privacy" className="hover:text-green-600 transition-colors">Privacy Policy</Link>
+             <Link href="/terms" className="hover:text-green-600 transition-colors">Terms of Service</Link>
+             <Link href="/contact" className="hover:text-green-600 transition-colors">Contact Us</Link>
+           </div>
+
            <p className="text-gray-400 text-[10px] uppercase tracking-[0.2em] font-black mb-2">Designed & Developed by</p>
             <a href="https://mockup.media" target="_blank" rel="noopener noreferrer" className="inline-block text-gray-400 hover:text-green-600 transition-all font-light text-base mb-6">
               Mockup Media (SMC-Private) Limited
