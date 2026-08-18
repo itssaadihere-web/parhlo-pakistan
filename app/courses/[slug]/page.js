@@ -1109,38 +1109,83 @@ export default function DynamicCourseDetail() {
       </section>
 
       {showPreviewOverlay && previewUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
-          <div className="relative w-full max-w-5xl overflow-hidden rounded-[2rem] bg-slate-950 shadow-2xl">
-            <button
-              type="button"
-              onClick={closePreview}
-              className="absolute right-4 top-4 z-30 rounded-full bg-white/90 px-4 py-2 text-sm font-black text-slate-900 shadow-lg hover:bg-white"
-            >
-              Close
-            </button>
-            <div className="aspect-video bg-black relative overflow-hidden">
-              {userEmail && (
-                <div 
-                  className="absolute pointer-events-none opacity-20 text-white font-mono text-sm font-bold z-10 transition-all duration-[5000ms] ease-in-out px-3 py-1 bg-black/50 rounded-lg"
-                  style={{ top: watermarkPos.top, left: watermarkPos.left }}
-                >
-                  {userEmail}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-3 sm:p-6 overflow-y-auto">
+          <div className="relative flex flex-col xl:flex-row items-center justify-center gap-6 w-full max-w-[90rem]">
+            
+            {/* Left Google Ad Placeholder */}
+            <div className="hidden xl:flex flex-col items-center justify-center w-52 h-[520px] shrink-0 bg-slate-900/80 border border-slate-800 rounded-3xl p-3 text-center">
+              <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase mb-2">Advertisement</span>
+              <div className="w-full h-full flex flex-col items-center justify-center rounded-2xl bg-slate-950/80 border border-dashed border-slate-800 p-4 overflow-hidden">
+                <div className="w-8 h-8 rounded-full bg-green-500/10 text-green-400 flex items-center justify-center mb-2 font-bold text-xs shrink-0">
+                  Ad
                 </div>
-              )}
-              {/* Invisible blockers to prevent hovering/clicking YouTube's native links */}
-              <div className="absolute top-0 left-0 w-full h-[70px] z-20" /> {/* Blocks Title and Share/Copy Link */}
-              <div className="absolute bottom-0 right-0 w-[150px] h-[60px] z-20" /> {/* Blocks YouTube Logo */}
-              <div className="absolute bottom-0 left-0 w-[150px] h-[60px] z-20" /> {/* Blocks Watch on YouTube button if it appears */}
-              
-              <iframe
-                src={previewUrl}
-                title="Course preview"
-                className="h-full w-full relative z-0"
-                allow="autoplay; encrypted-media; picture-in-picture"
-                allowFullScreen
-                sandbox="allow-scripts allow-same-origin allow-presentation"
-              />
+                <p className="text-xs font-bold text-slate-300">Left Ad Banner</p>
+                <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                  Google AdSense Vertical Banner
+                </p>
+                <ins className="adsbygoogle"
+                     style={{ display: 'block', width: '100%', height: '100%' }}
+                     data-ad-client="ca-pub-7315986629947930"
+                     data-ad-slot="LEFT_SLOT_ID"
+                     data-ad-format="auto"
+                     data-full-width-responsive="true" />
+              </div>
             </div>
+
+            {/* Video Player Modal Container */}
+            <div className="relative w-full max-w-5xl overflow-hidden rounded-[2rem] bg-slate-950 shadow-2xl border border-slate-800/80">
+              <button
+                type="button"
+                onClick={closePreview}
+                className="absolute right-4 top-4 z-30 rounded-full bg-white/90 px-4 py-2 text-sm font-black text-slate-900 shadow-lg hover:bg-white transition-all hover:scale-105"
+              >
+                Close
+              </button>
+              <div className="aspect-video bg-black relative overflow-hidden">
+                {userEmail && (
+                  <div 
+                    className="absolute pointer-events-none opacity-20 text-white font-mono text-sm font-bold z-10 transition-all duration-[5000ms] ease-in-out px-3 py-1 bg-black/50 rounded-lg"
+                    style={{ top: watermarkPos.top, left: watermarkPos.left }}
+                  >
+                    {userEmail}
+                  </div>
+                )}
+                {/* Invisible blockers to prevent hovering/clicking YouTube's native links */}
+                <div className="absolute top-0 left-0 w-full h-[70px] z-20" /> {/* Blocks Title and Share/Copy Link */}
+                <div className="absolute bottom-0 right-0 w-[150px] h-[60px] z-20" /> {/* Blocks YouTube Logo */}
+                <div className="absolute bottom-0 left-0 w-[150px] h-[60px] z-20" /> {/* Blocks Watch on YouTube button if it appears */}
+                
+                <iframe
+                  src={previewUrl}
+                  title="Course preview"
+                  className="h-full w-full relative z-0"
+                  allow="autoplay; encrypted-media; picture-in-picture"
+                  allowFullScreen
+                  sandbox="allow-scripts allow-same-origin allow-presentation"
+                />
+              </div>
+            </div>
+
+            {/* Right Google Ad Placeholder */}
+            <div className="hidden xl:flex flex-col items-center justify-center w-52 h-[520px] shrink-0 bg-slate-900/80 border border-slate-800 rounded-3xl p-3 text-center">
+              <span className="text-[10px] font-black tracking-widest text-slate-500 uppercase mb-2">Advertisement</span>
+              <div className="w-full h-full flex flex-col items-center justify-center rounded-2xl bg-slate-950/80 border border-dashed border-slate-800 p-4 overflow-hidden">
+                <div className="w-8 h-8 rounded-full bg-green-500/10 text-green-400 flex items-center justify-center mb-2 font-bold text-xs shrink-0">
+                  Ad
+                </div>
+                <p className="text-xs font-bold text-slate-300">Right Ad Banner</p>
+                <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                  Google AdSense Vertical Banner
+                </p>
+                <ins className="adsbygoogle"
+                     style={{ display: 'block', width: '100%', height: '100%' }}
+                     data-ad-client="ca-pub-7315986629947930"
+                     data-ad-slot="RIGHT_SLOT_ID"
+                     data-ad-format="auto"
+                     data-full-width-responsive="true" />
+              </div>
+            </div>
+
           </div>
         </div>
       )}
