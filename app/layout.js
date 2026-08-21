@@ -15,14 +15,41 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://parhlopakistan.com.pk";
+
 export const metadata = {
-  title: "Parhlo Pakistan",
-  description: "EdTech Portal for GenZ",
-  // This explicitly tells the browser where to find your symbol
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "Parhlo Pakistan — Modern Online Learning & Test Prep",
+    template: "%s | Parhlo Pakistan",
+  },
+  description: "Premier EdTech platform empowering students across Pakistan with MDCAT, ECAT, Matric, Intermediate & Skills courses.",
   icons: {
     icon: "/icon.png", 
     shortcut: "/icon.png",
     apple: "/icon.png",
+  },
+  openGraph: {
+    title: "Parhlo Pakistan — Modern Online Learning & Test Prep",
+    description: "Premier EdTech platform empowering students across Pakistan with MDCAT, ECAT, Matric, Intermediate & Skills courses.",
+    url: siteUrl,
+    siteName: "Parhlo Pakistan",
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Parhlo Pakistan — Your Journey to Smarter Learning",
+      },
+    ],
+    locale: "en_PK",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Parhlo Pakistan — Modern Online Learning & Test Prep",
+    description: "Premier EdTech platform empowering students across Pakistan with MDCAT, ECAT, Matric, Intermediate & Skills courses.",
+    images: ["/og-image.jpg"],
   },
   other: {
     "google-adsense-account": "ca-pub-7315986629947930",
