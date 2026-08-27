@@ -307,6 +307,94 @@ export default function ParhloPakistan() {
         </div>
       </section>
 
+      {/* Educational Value & Learning Methodology Section */}
+      <section className="bg-slate-900 text-white py-20 mb-24 rounded-[3.5rem] max-w-6xl mx-auto px-8 relative overflow-hidden border border-slate-800">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-green-900/30 via-slate-900 to-slate-900 pointer-events-none" />
+        <div className="relative z-10">
+          <div className="text-center max-w-3xl mx-auto mb-16">
+            <span className="text-green-400 text-xs font-black uppercase tracking-widest bg-green-500/10 px-4 py-1.5 rounded-full border border-green-500/20 inline-block mb-4">
+              Why Choose Parhlo Pakistan?
+            </span>
+            <h2 className="text-4xl md:text-5xl font-black tracking-tight mb-6">
+              Concept-Based Learning Designed for Top Academic Results
+            </h2>
+            <p className="text-slate-300 font-medium leading-relaxed text-base">
+              Parhlo Pakistan bridges the gap between traditional rote memorization and modern conceptual clarity. Our video masterclasses utilize interactive glass-board technology to make complex Board syllabus topics easy to understand and remember.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="bg-slate-950/80 p-8 rounded-3xl border border-slate-800">
+              <div className="w-12 h-12 rounded-2xl bg-green-500/10 border border-green-500/20 text-green-400 flex items-center justify-center font-bold mb-6">
+                01
+              </div>
+              <h3 className="text-xl font-bold mb-3">Exam-Focused Syllabus Coverage</h3>
+              <p className="text-slate-400 text-sm font-medium leading-relaxed">
+                Every lecture is aligned with current Board textbook chapters, past paper questions, and marking schemes to maximize your exam scores.
+              </p>
+            </div>
+
+            <div className="bg-slate-950/80 p-8 rounded-3xl border border-slate-800">
+              <div className="w-12 h-12 rounded-2xl bg-green-500/10 border border-green-500/20 text-green-400 flex items-center justify-center font-bold mb-6">
+                02
+              </div>
+              <h3 className="text-xl font-bold mb-3">Gen-Z Instructors & Mentors</h3>
+              <p className="text-slate-400 text-sm font-medium leading-relaxed">
+                Learn from young, passionate instructors who speak your language, solve complex problems step-by-step, and share practical study hacks.
+              </p>
+            </div>
+
+            <div className="bg-slate-950/80 p-8 rounded-3xl border border-slate-800">
+              <div className="w-12 h-12 rounded-2xl bg-green-500/10 border border-green-500/20 text-green-400 flex items-center justify-center font-bold mb-6">
+                03
+              </div>
+              <h3 className="text-xl font-bold mb-3">Flexible Study & Demo Previews</h3>
+              <p className="text-slate-400 text-sm font-medium leading-relaxed">
+                Watch free demo preview lectures before enrolling. Track your progress anytime on mobile, laptop, or tablet with lifetime access.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Comprehensive Student FAQ Section */}
+      <section className="max-w-4xl mx-auto px-8 pb-32">
+        <div className="text-center mb-12">
+          <h2 className="text-4xl font-black text-gray-900 tracking-tight mb-3">Frequently Asked Questions</h2>
+          <p className="text-gray-500 font-medium text-sm">Everything you need to know about learning with Parhlo Pakistan</p>
+        </div>
+
+        <div className="space-y-6">
+          <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">What boards and subjects are covered on Parhlo Pakistan?</h3>
+            <p className="text-gray-600 text-sm font-medium leading-relaxed">
+              We specialize in Sindh Board and Federal Board preparation for Class 9, Class 10, Class 11, and Class 12, focusing on core science and technical subjects including Physics, Chemistry, Computer Science, Biology, Mathematics, and English grammar.
+            </p>
+          </div>
+
+          <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">How do I start watching free demo lectures?</h3>
+            <p className="text-gray-600 text-sm font-medium leading-relaxed">
+              Simply click on any subject from the courses page, select &quot;Start Free Demo Lecture&quot; or click any video labeled with a free preview tag. You do not need a credit card to watch free demo lectures.
+            </p>
+          </div>
+
+          <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">What payment options are available for enrollment?</h3>
+            <p className="text-gray-600 text-sm font-medium leading-relaxed">
+              Students can choose between a one-time discounted fee or a 3-month equal installment plan. Payments are accepted via EasyPaisa, JazzCash, or Bank Transfer, verified manually by our admin team.
+            </p>
+          </div>
+
+          <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Will I get an official completion certificate?</h3>
+            <p className="text-gray-600 text-sm font-medium leading-relaxed">
+              Yes! Upon completing 100% of the video lectures and quizzes in a course, a verified digital Certificate of Completion is issued to your student dashboard.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <footer className="bg-white border-t border-gray-200 pt-16 pb-10">
         <div className="max-w-6xl mx-auto px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
