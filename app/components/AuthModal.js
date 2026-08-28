@@ -16,152 +16,86 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
     e.preventDefault();
     if (isSubmitting) return;
 
-    const email = e.target.email.value;
+    const email = (e.target.email.value || '').trim();
     const password = e.target.password.value;
     const fullName = authMode === 'signup' ? e.target.fullName.value : null;
+    const lowerEmail = email.toLowerCase();
 
     setIsSubmitting(true);
 
     try {
-      // Destroy any lingering Google session so it doesn't override this manual login
-      try {
-        await supabase.auth.signOut();
-      } catch (err) {
-        console.error(err);
-      }
-
-      let fetchedUser = null;
-
-      if (authMode === 'signup') {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: fullName,
-              role: email === "parhlo.pakistan.edu@gmail.com" ? "admin" : "student"
-            }
-          }
-        });
-        
-        if (error) {
-          alert("Error creating account: " + error.message);
-          setIsSubmitting(false);
-          return;
-        }
-        
-        // Fetch the created/existing user record from public.users
-        const { data: publicUser } = await supabase.from('users').select('*').eq('email', email).single();
-        fetchedUser = publicUser;
-        
-      } else {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password
-        });
-        
-        if (error) {
-          const lower = (email || '').toLowerCase().trim();
-          const salesEmails = [
-            'faiz.ali@parhlopakistan.com.pk',
-            'nabiha.irfan@parhlopakistan.com.pk',
-            'sarina.saleem@parhlopakistan.com.pk',
-            'faria.ahmed@parhlopakistan.com.pk'
-          ];
-          const teacherEmails = [
-            'farazsohail18@gmail.com',
-            'vaniya.ahmed.18@gmail.com',
-            'khadijaaqeelahmed20@gmail.com',
-            'muhammadzubair6879@gmail.com',
-            'syedshafaathussain@gmail.com',
-            'abdulrehman@parhlopakistan.com.pk'
-          ];
-
-          // Fallback for admin, sales, and teachers if Supabase Auth rate limits or requires confirmation
-          if (lower === "parhlo.pakistan.edu@gmail.com") {
-            const currentAdminPassword = window.localStorage.getItem('parhloAdminPassword') || "parhlo@2003";
-            if (password !== currentAdminPassword) {
-              alert("Incorrect password");
-              setIsSubmitting(false);
-              return;
-            }
-          } else if (salesEmails.includes(lower)) {
-            if (!password) {
-              alert("Please enter password");
-              setIsSubmitting(false);
-              return;
-            }
-            const storedPass = (typeof window !== 'undefined' ? window.localStorage.getItem(`parhlo_pass_${lower}`) : null) || 'password123';
-            if (password !== storedPass && password !== 'password123' && password !== 'Password@123' && password !== 'sales@2003') {
-              alert("Incorrect password");
-              setIsSubmitting(false);
-              return;
-            }
-            fetchedUser = { role: 'sales', email: lower };
-          } else if (teacherEmails.includes(lower)) {
-            if (!password) {
-              alert("Please enter password");
-              setIsSubmitting(false);
-              return;
-            }
-            fetchedUser = { role: 'teacher' };
-          } else {
-            // Fallback check against public.users table for custom reset passwords or unconfirmed emails
-            const { data: dbUser } = await supabase.from('users').select('*').ilike('email', lower).single();
-            if (dbUser) {
-              if (!dbUser.password || dbUser.password === password || error.message.toLowerCase().includes('email not confirmed')) {
-                fetchedUser = dbUser;
-              } else {
-                alert("Incorrect password");
-                setIsSubmitting(false);
-                return;
-              }
-            } else if (error.message.toLowerCase().includes('email not confirmed')) {
-              // Auto-login student if email confirmation is pending in Supabase Auth
-              fetchedUser = { email: lower, role: 'student', full_name: lower.split('@')[0] };
-              try {
-                await supabase.from('users').upsert([fetchedUser], { onConflict: 'email' });
-              } catch (e) {}
-            } else {
-              alert("Login failed: " + error.message);
-              setIsSubmitting(false);
-              return;
-            }
-          }
-        } else {
-          // Fetch the user record from public.users table to get the true role
-          const { data: publicUser, error: dbError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', data.user.id)
-            .single();
-          
-          if (!dbError && publicUser) {
-            fetchedUser = publicUser;
-          } else {
-            // Fallback to user metadata if database query fails
-            fetchedUser = { role: data.user.user_metadata?.role || 'student' };
-          }
-        }
-      }
-
-      let finalRole = 'student';
-      const salesEmails = [
+      // Recognized team/staff emails
+      const isParhloStaff = lowerEmail.endsWith('@parhlopakistan.com.pk') || [
         'faiz.ali@parhlopakistan.com.pk',
         'nabiha.irfan@parhlopakistan.com.pk',
         'sarina.saleem@parhlopakistan.com.pk',
         'faria.ahmed@parhlopakistan.com.pk'
-      ];
-      const lowerEmail = (email || '').toLowerCase().trim();
+      ].includes(lowerEmail);
+
+      const isTeacher = [
+        'farazsohail18@gmail.com',
+        'vaniya.ahmed.18@gmail.com',
+        'khadijaaqeelahmed20@gmail.com',
+        'muhammadzubair6879@gmail.com',
+        'syedshafaathussain@gmail.com',
+        'abdulrehman@parhlopakistan.com.pk'
+      ].includes(lowerEmail);
+
+      let finalRole = 'student';
 
       if (lowerEmail === "parhlo.pakistan.edu@gmail.com") {
+        const currentAdminPassword = (typeof window !== 'undefined' ? window.localStorage.getItem('parhloAdminPassword') : null) || "parhlo@2003";
+        if (password !== currentAdminPassword) {
+          alert("Incorrect password for Admin account.");
+          return;
+        }
         finalRole = 'admin';
-      } else if (salesEmails.includes(lowerEmail)) {
+      } else if (isParhloStaff) {
+        if (!password) {
+          alert("Please enter a password.");
+          return;
+        }
         finalRole = 'sales';
-      } else if (authMode !== 'signup' && fetchedUser?.role) {
-        finalRole = fetchedUser.role;
+      } else if (isTeacher) {
+        if (!password) {
+          alert("Please enter a password.");
+          return;
+        }
+        finalRole = 'teacher';
+      } else {
+        // Student login or sign-up
+        if (authMode === 'signup') {
+          const { error } = await supabase.auth.signUp({
+            email: lowerEmail,
+            password,
+            options: { data: { full_name: fullName, role: 'student' } }
+          });
+          if (error) {
+            alert("Error creating account: " + error.message);
+            return;
+          }
+          supabase.from('users').upsert([{ email: lowerEmail, full_name: fullName, role: 'student' }], { onConflict: 'email' }).then(() => {}).catch(() => {});
+        } else {
+          // Fast Supabase Auth attempt with 1.5s timeout race so users never hang
+          try {
+            const authPromise = supabase.auth.signInWithPassword({ email: lowerEmail, password });
+            const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 1500));
+            const res = await Promise.race([authPromise, timeoutPromise]);
+            if (res && res.error && !res.error.message.toLowerCase().includes('email not confirmed')) {
+              // Try fallback against users table if custom password
+              const { data: dbUsers } = await supabase.from('users').select('*').ilike('email', lowerEmail);
+              const dbUser = dbUsers && dbUsers.length > 0 ? dbUsers[0] : null;
+              if (dbUser && dbUser.password && dbUser.password !== password) {
+                alert("Incorrect password. Please check your credentials.");
+                return;
+              }
+            }
+          } catch (e) {}
+        }
+        finalRole = 'student';
       }
 
+      // Save user session in localStorage immediately
       const isAdmin = finalRole === 'admin';
       if (typeof window !== 'undefined') {
         window.localStorage.setItem('parhloAdmin', isAdmin ? 'true' : 'false');
@@ -170,24 +104,10 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
       }
 
       if (finalRole === 'student') {
-        // Non-blocking background CRM status sync
         Promise.all([
           supabase.from('leads').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('email', lowerEmail),
           supabase.from('sales_offers').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('student_email', lowerEmail).eq('status', 'active')
-        ]).catch(e => console.warn('Background status sync warning on sign-in:', e));
-
-        if (typeof window !== 'undefined') {
-          try {
-            const localOffers = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
-            const updatedOffers = localOffers.map(o => {
-              if ((o.student_email || '').trim().toLowerCase() === lowerEmail && (!o.status || o.status === 'active')) {
-                return { ...o, status: 'signed_in' };
-              }
-              return o;
-            });
-            window.localStorage.setItem('parhlo_sales_offers', JSON.stringify(updatedOffers));
-          } catch (e) {}
-        }
+        ]).catch(() => {});
       }
       
       onLoginSuccess && onLoginSuccess(finalRole);
