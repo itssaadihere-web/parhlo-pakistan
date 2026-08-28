@@ -33,6 +33,7 @@ export default function StudentDashboard() {
   const [intro, setIntro] = useState('');
   const [image, setImage] = useState('');
   
+  const [loading, setLoading] = useState(true);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
@@ -41,402 +42,340 @@ export default function StudentDashboard() {
     if (typeof window === 'undefined') return;
     
     const initDashboard = async () => {
-      let email = (window.localStorage.getItem('currentUserEmail') || '').trim().toLowerCase();
-      const isAdmin = window.localStorage.getItem('parhloAdmin') === 'true';
-
-      if (isAdmin) {
-        router.replace('/admin');
-        return;
-      }
-
-      // Check Supabase session for Google Login
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session && session.user && session.user.email) {
-          email = session.user.email.trim().toLowerCase();
-          window.localStorage.setItem('currentUserEmail', email);
-          
-          if (email === "parhlo.pakistan.edu@gmail.com") {
-            window.localStorage.setItem('parhloAdmin', 'true');
-            router.replace('/admin');
-            return;
-          } else {
-            window.localStorage.setItem('parhloAdmin', 'false');
-          }
+        setLoading(true);
+        let email = (window.localStorage.getItem('currentUserEmail') || '').trim().toLowerCase();
+        const isAdmin = window.localStorage.getItem('parhloAdmin') === 'true';
 
-          // Mark lead status as 'signed_in' in CRM for Google login users
-          try {
-            await supabase.from('leads').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('email', email);
-          } catch (e) {
-            console.warn('Lead status update warning on Google login:', e);
-          }
-        }
-      } catch (err) {
-        console.error(err);
-      }
-
-      if (!email) {
-        router.replace('/');
-        return;
-      }
-      
-      setUserEmail(email);
-      setStudentName(email.split('@')[0]);
-      
-      // Fetch user profile from users table using case-insensitive ilike without .single() crash
-      let userProfile = null;
-      try {
-        const { data: uProfiles } = await supabase
-          .from('users')
-          .select('*')
-          .ilike('email', email.trim());
-        if (uProfiles && uProfiles.length > 0) {
-          userProfile = uProfiles[0];
-        }
-      } catch (e) {
-        console.warn('Profile fetch warning:', e);
-      }
-        
-      if (userProfile) {
-        if (userProfile.role === 'teacher') {
-          window.localStorage.setItem('parhloRole', 'teacher');
-          router.replace('/teacher');
-          return;
-        }
-        if (userProfile.role === 'admin' || email === "parhlo.pakistan.edu@gmail.com") {
-          window.localStorage.setItem('parhloRole', 'admin');
-          window.localStorage.setItem('parhloAdmin', 'true');
+        if (isAdmin) {
           router.replace('/admin');
           return;
         }
-        setStudentName(userProfile.full_name || email.split('@')[0]);
-        setPhoneNumber(userProfile.phone || '');
-        setIntro(userProfile.intro || '');
-        setImage(userProfile.image || '');
-      } else {
+
+        // Check Supabase session for Google Login
         try {
-          const { data: { session: currentSession } } = await supabase.auth.getSession();
-          const fullNameFromAuth = currentSession?.user?.user_metadata?.full_name || currentSession?.user?.user_metadata?.name || email.split('@')[0];
-          await supabase.from('users').insert([{ email, full_name: fullNameFromAuth, role: 'student' }]);
-          setStudentName(fullNameFromAuth);
-        } catch (e) {}
-      }
-
-
-      // Fetch all purchases for this user from Supabase using case-insensitive ilike
-      let purchasesList = [];
-      try {
-        const { data: userPurchases } = await supabase
-          .from('purchases')
-          .select('*')
-          .ilike('student_email', email.trim());
-        if (userPurchases && userPurchases.length > 0) {
-          purchasesList = [...userPurchases];
-        }
-      } catch (e) {
-        console.warn('DB purchases fetch warning:', e);
-      }
-
-      // Local storage fallback for purchases
-      if (typeof window !== 'undefined') {
-        try {
-          const localP = JSON.parse(window.localStorage.getItem('parhlo_purchases') || '[]');
-          const matched = localP.filter(p => (p.student_email || '').trim().toLowerCase() === email.trim().toLowerCase());
-          matched.forEach(mp => {
-            const existingIdx = purchasesList.findIndex(p => 
-              p.id === mp.id || (p.course_slug || '').trim().toLowerCase() === (mp.course_slug || '').trim().toLowerCase()
-            );
-            if (existingIdx === -1) {
-              purchasesList.push(mp);
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session && session.user && session.user.email) {
+            email = session.user.email.trim().toLowerCase();
+            window.localStorage.setItem('currentUserEmail', email);
+            
+            if (email === "parhlo.pakistan.edu@gmail.com") {
+              window.localStorage.setItem('parhloAdmin', 'true');
+              router.replace('/admin');
+              return;
             } else {
-              // If local storage record has approved status and DB record is pending, override with local approved state
-              const dbSt = (purchasesList[existingIdx].status || '').toLowerCase();
-              const localSt = (mp.status || '').toLowerCase();
-              if (['approved', 'active', 'completed', 'paid'].includes(localSt) && dbSt === 'pending') {
-                purchasesList[existingIdx] = mp;
-              }
+              window.localStorage.setItem('parhloAdmin', 'false');
             }
-          });
-        } catch (e) {}
-      }
 
-      // Auto-update any 'active' sales offers for this student to 'signed_in'
-      try {
-        await supabase
-          .from('sales_offers')
-          .update({ status: 'signed_in', updated_at: new Date().toISOString() })
-          .ilike('student_email', email.trim())
-          .eq('status', 'active');
-          
+            // Non-blocking lead status update
+            supabase.from('leads').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('email', email).then(() => {}).catch(() => {});
+          }
+        } catch (err) {
+          console.error(err);
+        }
+
+        if (!email) {
+          router.replace('/');
+          return;
+        }
+        
+        setUserEmail(email);
+        setStudentName(email.split('@')[0]);
+
+        // Parallel data fetch across all tables in a single round-trip!
+        const [userProfileRes, purchasesRes, coursesRes, vProgressRes] = await Promise.all([
+          supabase.from('users').select('*').ilike('email', email.trim()),
+          supabase.from('purchases').select('*').ilike('student_email', email.trim()),
+          supabase.from('courses').select('*'),
+          supabase.from('user_video_progress').select('*').ilike('student_email', email.trim())
+        ]);
+
+        const userProfile = (userProfileRes?.data && userProfileRes.data.length > 0) ? userProfileRes.data[0] : null;
+
+        if (userProfile) {
+          if (userProfile.role === 'teacher') {
+            window.localStorage.setItem('parhloRole', 'teacher');
+            router.replace('/teacher');
+            return;
+          }
+          if (userProfile.role === 'admin' || email === "parhlo.pakistan.edu@gmail.com") {
+            window.localStorage.setItem('parhloRole', 'admin');
+            window.localStorage.setItem('parhloAdmin', 'true');
+            router.replace('/admin');
+            return;
+          }
+          setStudentName(userProfile.full_name || email.split('@')[0]);
+          setPhoneNumber(userProfile.phone || '');
+          setIntro(userProfile.intro || '');
+          setImage(userProfile.image || '');
+        } else {
+          // Background insert for new user
+          supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+            const fullNameFromAuth = currentSession?.user?.user_metadata?.full_name || currentSession?.user?.user_metadata?.name || email.split('@')[0];
+            supabase.from('users').insert([{ email, full_name: fullNameFromAuth, role: 'student' }]).then(() => {});
+            setStudentName(fullNameFromAuth);
+          }).catch(() => {});
+        }
+
+        let purchasesList = purchasesRes?.data || [];
+
+        // Local storage fallback for purchases
         if (typeof window !== 'undefined') {
           try {
-            const localOffers = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
-            const updatedOffers = localOffers.map(o => {
-              if ((o.student_email || '').trim().toLowerCase() === email.trim().toLowerCase() && (!o.status || o.status === 'active')) {
-                return { ...o, status: 'signed_in' };
+            const localP = JSON.parse(window.localStorage.getItem('parhlo_purchases') || '[]');
+            const matched = localP.filter(p => (p.student_email || '').trim().toLowerCase() === email.trim().toLowerCase());
+            matched.forEach(mp => {
+              const existingIdx = purchasesList.findIndex(p => 
+                p.id === mp.id || (p.course_slug || '').trim().toLowerCase() === (mp.course_slug || '').trim().toLowerCase()
+              );
+              if (existingIdx === -1) {
+                purchasesList.push(mp);
+              } else {
+                const dbSt = (purchasesList[existingIdx].status || '').toLowerCase();
+                const localSt = (mp.status || '').toLowerCase();
+                if (['approved', 'active', 'completed', 'paid'].includes(localSt) && dbSt === 'pending') {
+                  purchasesList[existingIdx] = mp;
+                }
               }
-              return o;
             });
-            window.localStorage.setItem('parhlo_sales_offers', JSON.stringify(updatedOffers));
           } catch (e) {}
         }
-      } catch (err) {
-        console.error('Error updating offer status to signed_in:', err);
-      }
 
-      // Auto-sync all local storage watch history for this student to Supabase
-      if (typeof window !== 'undefined' && email) {
-        try {
-          const syncRows = [];
-          const cleanUserEmail = email.trim().toLowerCase();
+        // Non-blocking sales offer status update
+        supabase.from('sales_offers').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('student_email', email.trim()).eq('status', 'active').then(() => {}).catch(() => {});
 
-          for (let i = 0; i < window.localStorage.length; i++) {
-            const key = window.localStorage.key(i);
-            if (key && key.startsWith('parhlo_watch_')) {
-              const parts = key.split('_');
-              if (parts.length >= 4) {
-                const keyEmail = parts[2].trim().toLowerCase();
-                const courseSlug = parts.slice(3).join('_').trim().toLowerCase();
+        // Non-blocking watch history sync
+        if (typeof window !== 'undefined' && email) {
+          try {
+            const syncRows = [];
+            const cleanUserEmail = email.trim().toLowerCase();
 
-                if (keyEmail === cleanUserEmail || keyEmail.includes(cleanUserEmail) || cleanUserEmail.includes(keyEmail)) {
-                  try {
-                    const watchMap = JSON.parse(window.localStorage.getItem(key) || '{}');
-                    if (typeof watchMap === 'object' && watchMap !== null) {
-                      Object.keys(watchMap).forEach(lecId => {
-                        const sec = Number(watchMap[lecId]) || 0;
-                        if (sec > 0) {
-                          syncRows.push({
-                            student_email: cleanUserEmail,
-                            course_slug: courseSlug,
-                            lecture_id: String(lecId),
-                            watched_seconds: sec,
-                            last_watched_at: new Date().toISOString()
-                          });
-                        }
-                      });
-                    }
-                  } catch (e) {}
+            for (let i = 0; i < window.localStorage.length; i++) {
+              const key = window.localStorage.key(i);
+              if (key && key.startsWith('parhlo_watch_')) {
+                const parts = key.split('_');
+                if (parts.length >= 4) {
+                  const keyEmail = parts[2].trim().toLowerCase();
+                  const courseSlug = parts.slice(3).join('_').trim().toLowerCase();
+
+                  if (keyEmail === cleanUserEmail || keyEmail.includes(cleanUserEmail) || cleanUserEmail.includes(keyEmail)) {
+                    try {
+                      const watchMap = JSON.parse(window.localStorage.getItem(key) || '{}');
+                      if (typeof watchMap === 'object' && watchMap !== null) {
+                        Object.keys(watchMap).forEach(lecId => {
+                          const sec = Number(watchMap[lecId]) || 0;
+                          if (sec > 0) {
+                            syncRows.push({
+                              student_email: cleanUserEmail,
+                              course_slug: courseSlug,
+                              lecture_id: String(lecId),
+                              watched_seconds: sec,
+                              last_watched_at: new Date().toISOString()
+                            });
+                          }
+                        });
+                      }
+                    } catch (e) {}
+                  }
                 }
               }
             }
-          }
 
-          if (syncRows.length > 0) {
-            await supabase
-              .from('user_video_progress')
-              .upsert(syncRows, { onConflict: 'student_email,course_slug,lecture_id' });
-          }
-        } catch (e) {
-          console.warn('Dashboard watch history sync warning:', e);
-        }
-      }
-
-      // Fetch user video progress from Supabase
-      let dbVideoProgressList = [];
-      try {
-        const { data: vProgress } = await supabase
-          .from('user_video_progress')
-          .select('*')
-          .ilike('student_email', email.trim());
-        if (vProgress) dbVideoProgressList = vProgress;
-      } catch (e) {
-        console.warn('DB video progress fetch warning:', e);
-      }
-
-      const isApprovedStatus = (p) => {
-        const st = (p.status || '').toLowerCase();
-        return (
-          ['approved', 'active', 'completed', 'paid', 'enrolled'].includes(st) ||
-          p.payment_plan === 'free_trial'
-        );
-      };
-
-      // Map pending payments (only for courses that do NOT have an approved purchase)
-      const approvedSlugsSet = new Set(
-        purchasesList.filter(isApprovedStatus).map(p => (p.course_slug || '').trim().toLowerCase())
-      );
-
-      const pending = purchasesList
-        .filter(p => (p.status || '').toLowerCase() === 'pending' && !approvedSlugsSet.has((p.course_slug || '').trim().toLowerCase()))
-        .map(p => ({
-          id: p.id,
-          courseName: p.course_slug,
-          transactionId: 'N/A',
-          date: new Date(p.created_at || Date.now()).toLocaleDateString(),
-          status: 'pending'
-        }));
-      setPendingPayments(pending);
-
-      // Fetch all courses to match with approved purchases
-      const DEFAULT_COURSES = [
-        { id: 'mathematics-smart-pro', name: 'Mathematics Smart Pro (Class 9)', slug: 'mathematics-smart-pro', category: 'Mathematics', price: 'Rs. 9,999' },
-        { id: 'mathematics-smart-lite', name: 'Mathematics Smart Lite (Class 9)', slug: 'mathematics-smart-lite', category: 'Mathematics', price: 'Rs. 7,140' },
-        { id: 'biology-smart-pro', name: 'Biology Smart Pro (Class 9)', slug: 'biology-smart-pro', category: 'Biology', price: 'Rs. 9,999' },
-        { id: 'chemistry-smart-pro', name: 'Chemistry Smart Pro (Class 9)', slug: 'chemistry-smart-pro', category: 'Chemistry', price: 'Rs. 9,999' },
-        { id: 'physics-smart-pro', name: 'Physics Smart Pro (Class 9)', slug: 'physics-smart-pro', category: 'Physics', price: 'Rs. 9,999' },
-        { id: 'computer-science-smart-pro-class-9', name: 'Computer Science Smart Pro (Class 9)', slug: 'computer-science-smart-pro-class-9', category: 'Computer Science', price: 'Rs. 7,499' },
-        { id: 'english-smart-pro', name: 'English Smart Pro (Class 9)', slug: 'english-smart-pro', category: 'English', price: 'Rs. 7,499' }
-      ];
-
-      const { data: dbCourses } = await supabase.from('courses').select('*');
-      const adminCourses = dbCourses && dbCourses.length > 0 ? dbCourses : DEFAULT_COURSES;
-
-      const uniqueCoursesMap = new Map();
-      purchasesList.forEach(p => {
-        const st = (p.status || '').toLowerCase();
-        if (st !== 'suspended' && st !== 'cancelled' && st !== 'rejected' && p.course_slug) {
-          const slugKey = p.course_slug.trim().toLowerCase();
-          const existing = uniqueCoursesMap.get(slugKey);
-          if (!existing) {
-            uniqueCoursesMap.set(slugKey, p);
-          } else {
-            const existingSt = (existing.status || '').toLowerCase();
-            if (existingSt === 'pending' && st !== 'pending') {
-              uniqueCoursesMap.set(slugKey, p);
+            if (syncRows.length > 0) {
+              supabase.from('user_video_progress').upsert(syncRows, { onConflict: 'student_email,course_slug,lecture_id' }).then(() => {}).catch(() => {});
             }
-          }
+          } catch (e) {}
         }
-      });
-      const approved = Array.from(uniqueCoursesMap.values());
-      let totalStudySecondsAll = 0;
 
-      const activeCourses = approved.map(purchase => {
-        const course = adminCourses.find(c => 
-          (c.slug || '').trim().toLowerCase() === (purchase.course_slug || '').trim().toLowerCase()
-        ) || DEFAULT_COURSES.find(c => 
-          (c.slug || '').trim().toLowerCase() === (purchase.course_slug || '').trim().toLowerCase()
-        ) || {
-          id: purchase.course_slug,
-          name: (purchase.course_slug || 'Course').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-          slug: purchase.course_slug,
-          category: 'Class 9',
-          price: 'Rs. 9,999'
+        const dbVideoProgressList = vProgressRes?.data || [];
+
+        const isApprovedStatus = (p) => {
+          const st = (p.status || '').toLowerCase();
+          return (
+            ['approved', 'active', 'completed', 'paid', 'enrolled'].includes(st) ||
+            p.payment_plan === 'free_trial'
+          );
         };
-            
-            // Read watched time per lecture from localStorage & Supabase
-            const key = `parhlo_watch_${email}_${course.slug}`;
-            let progressData = {};
-            try {
-              progressData = JSON.parse(window.localStorage.getItem(key) || '{}');
-              if (typeof progressData !== 'object' || progressData === null) progressData = {};
-            } catch (e) {
-              progressData = {};
-            }
 
-            // Merge Supabase video progress
-            const courseSlugLower = (course.slug || '').trim().toLowerCase();
-            const courseDbProgress = dbVideoProgressList.filter(p => (p.course_slug || '').trim().toLowerCase() === courseSlugLower);
-            courseDbProgress.forEach(p => {
-              const lecId = String(p.lecture_id);
-              const secFromDb = Number(p.watched_seconds) || 0;
-              if (!progressData[lecId] || secFromDb > progressData[lecId]) {
-                progressData[lecId] = secFromDb;
-              }
-            });
-            
-            let watchedSeconds = 0;
-            let completedLectures = 0;
-            const totalLectures = course.lectures?.length || 1;
+        const approvedSlugsSet = new Set(
+          purchasesList.filter(isApprovedStatus).map(p => (p.course_slug || '').trim().toLowerCase())
+        );
 
-            Object.keys(progressData).forEach(lecId => {
-               watchedSeconds += progressData[lecId];
-               if (progressData[lecId] >= 30) {
-                 completedLectures += 1;
-               }
-            });
+        const pending = purchasesList
+          .filter(p => (p.status || '').toLowerCase() === 'pending' && !approvedSlugsSet.has((p.course_slug || '').trim().toLowerCase()))
+          .map(p => ({
+            id: p.id,
+            courseName: p.course_slug,
+            transactionId: 'N/A',
+            date: new Date(p.created_at || Date.now()).toLocaleDateString(),
+            status: 'pending'
+          }));
+        setPendingPayments(pending);
 
-            totalStudySecondsAll += watchedSeconds;
-            completedLectures = Math.min(totalLectures, completedLectures);
+        const DEFAULT_COURSES = [
+          { id: 'mathematics-smart-pro', name: 'Mathematics Smart Pro (Class 9)', slug: 'mathematics-smart-pro', category: 'Mathematics', price: 'Rs. 9,999' },
+          { id: 'mathematics-smart-lite', name: 'Mathematics Smart Lite (Class 9)', slug: 'mathematics-smart-lite', category: 'Mathematics', price: 'Rs. 7,140' },
+          { id: 'biology-smart-pro', name: 'Biology Smart Pro (Class 9)', slug: 'biology-smart-pro', category: 'Biology', price: 'Rs. 9,999' },
+          { id: 'chemistry-smart-pro', name: 'Chemistry Smart Pro (Class 9)', slug: 'chemistry-smart-pro', category: 'Chemistry', price: 'Rs. 9,999' },
+          { id: 'physics-smart-pro', name: 'Physics Smart Pro (Class 9)', slug: 'physics-smart-pro', category: 'Physics', price: 'Rs. 9,999' },
+          { id: 'computer-science-smart-pro-class-9', name: 'Computer Science Smart Pro (Class 9)', slug: 'computer-science-smart-pro-class-9', category: 'Computer Science', price: 'Rs. 7,499' },
+          { id: 'english-smart-pro', name: 'English Smart Pro (Class 9)', slug: 'english-smart-pro', category: 'English', price: 'Rs. 7,499' }
+        ];
 
-            let estimatedTotalSeconds = 0;
-            if (course.lectures && course.lectures.length > 0) {
-              course.lectures.forEach(l => {
-                let max = 900;
-                if (l.duration && l.duration.includes('min')) max = (parseInt(l.duration) || 15) * 60;
-                estimatedTotalSeconds += max;
-              });
+        const dbCourses = coursesRes?.data;
+        const adminCourses = dbCourses && dbCourses.length > 0 ? dbCourses : DEFAULT_COURSES;
+
+        const uniqueCoursesMap = new Map();
+        purchasesList.forEach(p => {
+          const st = (p.status || '').toLowerCase();
+          if (st !== 'suspended' && st !== 'cancelled' && st !== 'rejected' && p.course_slug) {
+            const slugKey = p.course_slug.trim().toLowerCase();
+            const existing = uniqueCoursesMap.get(slugKey);
+            if (!existing) {
+              uniqueCoursesMap.set(slugKey, p);
             } else {
-              estimatedTotalSeconds = totalLectures * 10 * 60;
+              const existingSt = (existing.status || '').toLowerCase();
+              if (existingSt === 'pending' && st !== 'pending') {
+                uniqueCoursesMap.set(slugKey, p);
+              }
             }
+          }
+        });
+        const approved = Array.from(uniqueCoursesMap.values());
+        let totalStudySecondsAll = 0;
 
-            const progressPct = Math.min(100, Math.floor((watchedSeconds / estimatedTotalSeconds) * 100));
+        const activeCourses = approved.map(purchase => {
+          const course = adminCourses.find(c => 
+            (c.slug || '').trim().toLowerCase() === (purchase.course_slug || '').trim().toLowerCase()
+          ) || DEFAULT_COURSES.find(c => 
+            (c.slug || '').trim().toLowerCase() === (purchase.course_slug || '').trim().toLowerCase()
+          ) || {
+            id: purchase.course_slug,
+            name: (purchase.course_slug || 'Course').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+            slug: purchase.course_slug,
+            category: 'Class 9',
+            price: 'Rs. 9,999'
+          };
+              
+          const key = `parhlo_watch_${email}_${course.slug}`;
+          let progressData = {};
+          try {
+            progressData = JSON.parse(window.localStorage.getItem(key) || '{}');
+            if (typeof progressData !== 'object' || progressData === null) progressData = {};
+          } catch (e) {
+            progressData = {};
+          }
 
-            // Calculate weekly watched seconds
-            const now = new Date();
-            const startOfYear = new Date(now.getFullYear(), 0, 1);
-            const dayOfYear = Math.floor((now - startOfYear) / (24 * 60 * 60 * 1000));
-            const weekNum = Math.ceil((dayOfYear + startOfYear.getDay() + 1) / 7);
-            const currentWeekId = `${now.getFullYear()}_W${weekNum}`;
+          const courseSlugLower = (course.slug || '').trim().toLowerCase();
+          const courseDbProgress = dbVideoProgressList.filter(p => (p.course_slug || '').trim().toLowerCase() === courseSlugLower);
+          courseDbProgress.forEach(p => {
+            const lecId = String(p.lecture_id);
+            const secFromDb = Number(p.watched_seconds) || 0;
+            if (!progressData[lecId] || secFromDb > progressData[lecId]) {
+              progressData[lecId] = secFromDb;
+            }
+          });
+          
+          let watchedSeconds = 0;
+          let completedLectures = 0;
+          const totalLectures = course.lectures?.length || 1;
 
-            const weekKey = `parhlo_weekly_${email}_${course.slug}`;
-            let localWeeklyWatchedSec = 0;
-            try {
-              const weeklyMap = JSON.parse(window.localStorage.getItem(weekKey) || '{}');
-              localWeeklyWatchedSec = Number(weeklyMap[currentWeekId]) || 0;
-            } catch (e) {}
+          Object.keys(progressData).forEach(lecId => {
+             watchedSeconds += progressData[lecId];
+             if (progressData[lecId] >= 30) {
+               completedLectures += 1;
+             }
+          });
 
-            const dbWeeklySec = courseDbProgress
-              .filter(r => {
-                if (!r.last_watched_at) return false;
-                const rDate = new Date(r.last_watched_at);
-                const startOfWeek = new Date(now);
-                startOfWeek.setDate(now.getDate() - now.getDay());
-                startOfWeek.setHours(0, 0, 0, 0);
-                return rDate >= startOfWeek;
-              })
-              .reduce((acc, r) => acc + (Number(r.watched_seconds) || 0), 0);
+          totalStudySecondsAll += watchedSeconds;
+          completedLectures = Math.min(totalLectures, completedLectures);
 
-            const weeklyWatchedSec = Math.max(localWeeklyWatchedSec, dbWeeklySec);
+          let estimatedTotalSeconds = 0;
+          if (course.lectures && course.lectures.length > 0) {
+            course.lectures.forEach(l => {
+              let max = 900;
+              if (l.duration && l.duration.includes('min')) max = (parseInt(l.duration) || 15) * 60;
+              estimatedTotalSeconds += max;
+            });
+          } else {
+            estimatedTotalSeconds = totalLectures * 10 * 60;
+          }
 
-            const weeklyLimitSeconds = Math.round(estimatedTotalSeconds / 12);
-            const oneMonthFreeLimitSeconds = Math.round(estimatedTotalSeconds / 3);
+          const progressPct = Math.min(100, Math.floor((watchedSeconds / estimatedTotalSeconds) * 100));
 
-            const isFreeTrial = purchase.payment_plan === 'free_trial';
-            const isPending = (purchase.status || '').toLowerCase() === 'pending';
-            const rawPrice = parsePrice(course.price);
-            const totalCoursePrice = purchase.total_price || rawPrice;
-            const monthlyInst = purchase.monthly_installment_amount || Math.round(totalCoursePrice / 3);
-            const amountPaid = purchase.amount_paid || 0;
-            const remainingReceivable = isFreeTrial ? totalCoursePrice : Math.max(0, totalCoursePrice - amountPaid);
+          const now = new Date();
+          const startOfYear = new Date(now.getFullYear(), 0, 1);
+          const dayOfYear = Math.floor((now - startOfYear) / (24 * 60 * 60 * 1000));
+          const weekNum = Math.ceil((dayOfYear + startOfYear.getDay() + 1) / 7);
+          const currentWeekId = `${now.getFullYear()}_W${weekNum}`;
 
-            return {
-              id: purchase.id,
-              title: course.name,
-              slug: course.slug,
-              category: course.category || 'Course',
-              progress: progressPct,
-              totalLectures: totalLectures,
-              completedLectures: completedLectures,
-              watchedSeconds: watchedSeconds,
-              watchedHours: (watchedSeconds / 3600).toFixed(1),
-              weeklyWatchedSec: weeklyWatchedSec,
-              weeklyLimitSeconds: weeklyLimitSeconds,
-              oneMonthFreeLimitSeconds: oneMonthFreeLimitSeconds,
-              paymentPlan: purchase.payment_plan || 'full',
-              isFreeTrial: isFreeTrial,
-              isPending: isPending,
-              status: purchase.status || 'approved',
-              totalCoursePrice: totalCoursePrice,
-              monthlyInstallment: monthlyInst,
-              amountPaid: amountPaid,
-              remainingReceivable: remainingReceivable,
-              nextDueDate: purchase.next_due_date ? new Date(purchase.next_due_date).toLocaleDateString() : null,
-              imageClass: 'from-slate-900 via-slate-700 to-green-600'
-            };
-          }).filter(Boolean);
+          const weekKey = `parhlo_weekly_${email}_${course.slug}`;
+          let localWeeklyWatchedSec = 0;
+          try {
+            const weeklyMap = JSON.parse(window.localStorage.getItem(weekKey) || '{}');
+            localWeeklyWatchedSec = Number(weeklyMap[currentWeekId]) || 0;
+          } catch (e) {}
 
-          setEnrolledCourses(activeCourses);
-          setTotalStudyHours((totalStudySecondsAll / 3600).toFixed(1));
-      };
+          const dbWeeklySec = courseDbProgress
+            .filter(r => {
+              if (!r.last_watched_at) return false;
+              const rDate = new Date(r.last_watched_at);
+              const startOfWeek = new Date(now);
+              startOfWeek.setDate(now.getDate() - now.getDay());
+              startOfWeek.setHours(0, 0, 0, 0);
+              return rDate >= startOfWeek;
+            })
+            .reduce((acc, r) => acc + (Number(r.watched_seconds) || 0), 0);
+
+          const weeklyWatchedSec = Math.max(localWeeklyWatchedSec, dbWeeklySec);
+
+          const weeklyLimitSeconds = Math.round(estimatedTotalSeconds / 12);
+          const oneMonthFreeLimitSeconds = Math.round(estimatedTotalSeconds / 3);
+
+          const isFreeTrial = purchase.payment_plan === 'free_trial';
+          const isPending = (purchase.status || '').toLowerCase() === 'pending';
+          const rawPrice = parsePrice(course.price);
+          const totalCoursePrice = purchase.total_price || rawPrice;
+          const monthlyInst = purchase.monthly_installment_amount || Math.round(totalCoursePrice / 3);
+          const amountPaid = purchase.amount_paid || 0;
+          const remainingReceivable = isFreeTrial ? totalCoursePrice : Math.max(0, totalCoursePrice - amountPaid);
+
+          return {
+            id: purchase.id,
+            title: course.name,
+            slug: course.slug,
+            category: course.category || 'Course',
+            progress: progressPct,
+            totalLectures: totalLectures,
+            completedLectures: completedLectures,
+            watchedSeconds: watchedSeconds,
+            watchedHours: (watchedSeconds / 3600).toFixed(1),
+            weeklyWatchedSec: weeklyWatchedSec,
+            weeklyLimitSeconds: weeklyLimitSeconds,
+            oneMonthFreeLimitSeconds: oneMonthFreeLimitSeconds,
+            paymentPlan: purchase.payment_plan || 'full',
+            isFreeTrial: isFreeTrial,
+            isPending: isPending,
+            status: purchase.status || 'approved',
+            totalCoursePrice: totalCoursePrice,
+            monthlyInstallment: monthlyInst,
+            amountPaid: amountPaid,
+            remainingReceivable: remainingReceivable,
+            nextDueDate: purchase.next_due_date ? new Date(purchase.next_due_date).toLocaleDateString() : null,
+            imageClass: 'from-slate-900 via-slate-700 to-green-600'
+          };
+        }).filter(Boolean);
+
+        setEnrolledCourses(activeCourses);
+        setTotalStudyHours((totalStudySecondsAll / 3600).toFixed(1));
+      } catch (err) {
+        console.error('Error initializing dashboard:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
     initDashboard();
-
-    window.addEventListener('focus', initDashboard);
-    window.addEventListener('storage', initDashboard);
-    return () => {
-      window.removeEventListener('focus', initDashboard);
-      window.removeEventListener('storage', initDashboard);
-    };
   }, []);
 
   const handleLogout = async () => {
@@ -453,11 +392,14 @@ export default function StudentDashboard() {
     }
   };
 
-  const menuItems = [
-    { name: 'Overview', icon: <BookOpen size={20} />, id: 'overview' },
-    { name: 'My Subjects', icon: <PlayCircle size={20} />, id: 'courses' },
-    { name: 'Settings', icon: <Settings size={20} />, id: 'settings' }
-  ];
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-6">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-green-600 border-t-transparent mb-4"></div>
+        <p className="text-slate-600 font-bold text-sm">Loading your dashboard...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-[#F8FAFC] font-sans text-slate-900">

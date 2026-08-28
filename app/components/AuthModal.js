@@ -156,30 +156,23 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
     }
 
     if (finalRole === 'student') {
-      try {
-        await supabase.from('leads').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('email', lowerEmail);
-        
-        // Update any active offers for this student email to 'signed_in'
-        await supabase
-          .from('sales_offers')
-          .update({ status: 'signed_in', updated_at: new Date().toISOString() })
-          .ilike('student_email', lowerEmail)
-          .eq('status', 'active');
+      // Non-blocking background CRM status sync
+      Promise.all([
+        supabase.from('leads').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('email', lowerEmail),
+        supabase.from('sales_offers').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('student_email', lowerEmail).eq('status', 'active')
+      ]).catch(e => console.warn('Background status sync warning on sign-in:', e));
 
-        if (typeof window !== 'undefined') {
-          try {
-            const localOffers = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
-            const updatedOffers = localOffers.map(o => {
-              if ((o.student_email || '').trim().toLowerCase() === lowerEmail && (!o.status || o.status === 'active')) {
-                return { ...o, status: 'signed_in' };
-              }
-              return o;
-            });
-            window.localStorage.setItem('parhlo_sales_offers', JSON.stringify(updatedOffers));
-          } catch (e) {}
-        }
-      } catch (e) {
-        console.warn('Sales offer status update warning on sign-in:', e);
+      if (typeof window !== 'undefined') {
+        try {
+          const localOffers = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
+          const updatedOffers = localOffers.map(o => {
+            if ((o.student_email || '').trim().toLowerCase() === lowerEmail && (!o.status || o.status === 'active')) {
+              return { ...o, status: 'signed_in' };
+            }
+            return o;
+          });
+          window.localStorage.setItem('parhlo_sales_offers', JSON.stringify(updatedOffers));
+        } catch (e) {}
       }
     }
     
