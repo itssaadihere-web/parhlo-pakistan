@@ -7,177 +7,197 @@ import { supabase } from '../../utils/supabase';
 export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLoginSuccess }) {
   const [authMode, setAuthMode] = useState(initialMode);
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   if (!isOpen) return null;
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     const email = e.target.email.value;
     const password = e.target.password.value;
     const fullName = authMode === 'signup' ? e.target.fullName.value : null;
 
-    // Destroy any lingering Google session so it doesn't override this manual login
+    setIsSubmitting(true);
+
     try {
-      await supabase.auth.signOut();
-    } catch (err) {
-      console.error(err);
-    }
-
-    let fetchedUser = null;
-
-    if (authMode === 'signup') {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            role: email === "parhlo.pakistan.edu@gmail.com" ? "admin" : "student"
-          }
-        }
-      });
-      
-      if (error) {
-        alert("Error creating account: " + error.message);
-        return;
+      // Destroy any lingering Google session so it doesn't override this manual login
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.error(err);
       }
-      
-      // Fetch the created/existing user record from public.users
-      const { data: publicUser } = await supabase.from('users').select('*').eq('email', email).single();
-      fetchedUser = publicUser;
-      
-    } else {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-      
-      if (error) {
-        const lower = (email || '').toLowerCase().trim();
-        const salesEmails = [
-          'faiz.ali@parhlopakistan.com.pk',
-          'nabiha.irfan@parhlopakistan.com.pk',
-          'sarina.saleem@parhlopakistan.com.pk',
-          'faria.ahmed@parhlopakistan.com.pk'
-        ];
-        const teacherEmails = [
-          'farazsohail18@gmail.com',
-          'vaniya.ahmed.18@gmail.com',
-          'khadijaaqeelahmed20@gmail.com',
-          'muhammadzubair6879@gmail.com',
-          'syedshafaathussain@gmail.com',
-          'abdulrehman@parhlopakistan.com.pk'
-        ];
 
-        // Fallback for admin, sales, and teachers if Supabase Auth rate limits or requires confirmation
-        if (lower === "parhlo.pakistan.edu@gmail.com") {
-          const currentAdminPassword = window.localStorage.getItem('parhloAdminPassword') || "parhlo@2003";
-          if (password !== currentAdminPassword) {
-            alert("Incorrect password");
-            return;
+      let fetchedUser = null;
+
+      if (authMode === 'signup') {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+              role: email === "parhlo.pakistan.edu@gmail.com" ? "admin" : "student"
+            }
           }
-        } else if (salesEmails.includes(lower)) {
-          if (!password) {
-            alert("Please enter password");
-            return;
-          }
-          const storedPass = (typeof window !== 'undefined' ? window.localStorage.getItem(`parhlo_pass_${lower}`) : null) || 'password123';
-          if (password !== storedPass && password !== 'password123' && password !== 'Password@123' && password !== 'sales@2003') {
-            alert("Incorrect password");
-            return;
-          }
-          fetchedUser = { role: 'sales', email: lower };
-        } else if (teacherEmails.includes(lower)) {
-          if (!password) {
-            alert("Please enter password");
-            return;
-          }
-          fetchedUser = { role: 'teacher' };
-        } else {
-          // Fallback check against public.users table for custom reset passwords or unconfirmed emails
-          const { data: dbUser } = await supabase.from('users').select('*').ilike('email', lower).single();
-          if (dbUser) {
-            if (!dbUser.password || dbUser.password === password || error.message.toLowerCase().includes('email not confirmed')) {
-              fetchedUser = dbUser;
-            } else {
+        });
+        
+        if (error) {
+          alert("Error creating account: " + error.message);
+          setIsSubmitting(false);
+          return;
+        }
+        
+        // Fetch the created/existing user record from public.users
+        const { data: publicUser } = await supabase.from('users').select('*').eq('email', email).single();
+        fetchedUser = publicUser;
+        
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
+        
+        if (error) {
+          const lower = (email || '').toLowerCase().trim();
+          const salesEmails = [
+            'faiz.ali@parhlopakistan.com.pk',
+            'nabiha.irfan@parhlopakistan.com.pk',
+            'sarina.saleem@parhlopakistan.com.pk',
+            'faria.ahmed@parhlopakistan.com.pk'
+          ];
+          const teacherEmails = [
+            'farazsohail18@gmail.com',
+            'vaniya.ahmed.18@gmail.com',
+            'khadijaaqeelahmed20@gmail.com',
+            'muhammadzubair6879@gmail.com',
+            'syedshafaathussain@gmail.com',
+            'abdulrehman@parhlopakistan.com.pk'
+          ];
+
+          // Fallback for admin, sales, and teachers if Supabase Auth rate limits or requires confirmation
+          if (lower === "parhlo.pakistan.edu@gmail.com") {
+            const currentAdminPassword = window.localStorage.getItem('parhloAdminPassword') || "parhlo@2003";
+            if (password !== currentAdminPassword) {
               alert("Incorrect password");
+              setIsSubmitting(false);
               return;
             }
-          } else if (error.message.toLowerCase().includes('email not confirmed')) {
-            // Auto-login student if email confirmation is pending in Supabase Auth
-            fetchedUser = { email: lower, role: 'student', full_name: lower.split('@')[0] };
-            try {
-              await supabase.from('users').upsert([fetchedUser], { onConflict: 'email' });
-            } catch (e) {}
+          } else if (salesEmails.includes(lower)) {
+            if (!password) {
+              alert("Please enter password");
+              setIsSubmitting(false);
+              return;
+            }
+            const storedPass = (typeof window !== 'undefined' ? window.localStorage.getItem(`parhlo_pass_${lower}`) : null) || 'password123';
+            if (password !== storedPass && password !== 'password123' && password !== 'Password@123' && password !== 'sales@2003') {
+              alert("Incorrect password");
+              setIsSubmitting(false);
+              return;
+            }
+            fetchedUser = { role: 'sales', email: lower };
+          } else if (teacherEmails.includes(lower)) {
+            if (!password) {
+              alert("Please enter password");
+              setIsSubmitting(false);
+              return;
+            }
+            fetchedUser = { role: 'teacher' };
           } else {
-            alert("Login failed: " + error.message);
-            return;
+            // Fallback check against public.users table for custom reset passwords or unconfirmed emails
+            const { data: dbUser } = await supabase.from('users').select('*').ilike('email', lower).single();
+            if (dbUser) {
+              if (!dbUser.password || dbUser.password === password || error.message.toLowerCase().includes('email not confirmed')) {
+                fetchedUser = dbUser;
+              } else {
+                alert("Incorrect password");
+                setIsSubmitting(false);
+                return;
+              }
+            } else if (error.message.toLowerCase().includes('email not confirmed')) {
+              // Auto-login student if email confirmation is pending in Supabase Auth
+              fetchedUser = { email: lower, role: 'student', full_name: lower.split('@')[0] };
+              try {
+                await supabase.from('users').upsert([fetchedUser], { onConflict: 'email' });
+              } catch (e) {}
+            } else {
+              alert("Login failed: " + error.message);
+              setIsSubmitting(false);
+              return;
+            }
+          }
+        } else {
+          // Fetch the user record from public.users table to get the true role
+          const { data: publicUser, error: dbError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', data.user.id)
+            .single();
+          
+          if (!dbError && publicUser) {
+            fetchedUser = publicUser;
+          } else {
+            // Fallback to user metadata if database query fails
+            fetchedUser = { role: data.user.user_metadata?.role || 'student' };
           }
         }
-      } else {
-        // Fetch the user record from public.users table to get the true role
-        const { data: publicUser, error: dbError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
-        
-        if (!dbError && publicUser) {
-          fetchedUser = publicUser;
-        } else {
-          // Fallback to user metadata if database query fails
-          fetchedUser = { role: data.user.user_metadata?.role || 'student' };
+      }
+
+      let finalRole = 'student';
+      const salesEmails = [
+        'faiz.ali@parhlopakistan.com.pk',
+        'nabiha.irfan@parhlopakistan.com.pk',
+        'sarina.saleem@parhlopakistan.com.pk',
+        'faria.ahmed@parhlopakistan.com.pk'
+      ];
+      const lowerEmail = (email || '').toLowerCase().trim();
+
+      if (lowerEmail === "parhlo.pakistan.edu@gmail.com") {
+        finalRole = 'admin';
+      } else if (salesEmails.includes(lowerEmail)) {
+        finalRole = 'sales';
+      } else if (authMode !== 'signup' && fetchedUser?.role) {
+        finalRole = fetchedUser.role;
+      }
+
+      const isAdmin = finalRole === 'admin';
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('parhloAdmin', isAdmin ? 'true' : 'false');
+        window.localStorage.setItem('currentUserEmail', lowerEmail);
+        window.localStorage.setItem('parhloRole', finalRole);
+      }
+
+      if (finalRole === 'student') {
+        // Non-blocking background CRM status sync
+        Promise.all([
+          supabase.from('leads').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('email', lowerEmail),
+          supabase.from('sales_offers').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('student_email', lowerEmail).eq('status', 'active')
+        ]).catch(e => console.warn('Background status sync warning on sign-in:', e));
+
+        if (typeof window !== 'undefined') {
+          try {
+            const localOffers = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
+            const updatedOffers = localOffers.map(o => {
+              if ((o.student_email || '').trim().toLowerCase() === lowerEmail && (!o.status || o.status === 'active')) {
+                return { ...o, status: 'signed_in' };
+              }
+              return o;
+            });
+            window.localStorage.setItem('parhlo_sales_offers', JSON.stringify(updatedOffers));
+          } catch (e) {}
         }
       }
+      
+      onLoginSuccess && onLoginSuccess(finalRole);
+      onClose();
+    } catch (err) {
+      console.error('Login process error:', err);
+      alert('Login failed. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    let finalRole = 'student';
-    const salesEmails = [
-      'faiz.ali@parhlopakistan.com.pk',
-      'nabiha.irfan@parhlopakistan.com.pk',
-      'sarina.saleem@parhlopakistan.com.pk',
-      'faria.ahmed@parhlopakistan.com.pk'
-    ];
-    const lowerEmail = (email || '').toLowerCase().trim();
-
-    if (lowerEmail === "parhlo.pakistan.edu@gmail.com") {
-      finalRole = 'admin';
-    } else if (salesEmails.includes(lowerEmail)) {
-      finalRole = 'sales';
-    } else if (authMode !== 'signup' && fetchedUser?.role) {
-      finalRole = fetchedUser.role;
-    }
-
-    const isAdmin = finalRole === 'admin';
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('parhloAdmin', isAdmin ? 'true' : 'false');
-      window.localStorage.setItem('currentUserEmail', lowerEmail);
-      window.localStorage.setItem('parhloRole', finalRole);
-    }
-
-    if (finalRole === 'student') {
-      // Non-blocking background CRM status sync
-      Promise.all([
-        supabase.from('leads').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('email', lowerEmail),
-        supabase.from('sales_offers').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('student_email', lowerEmail).eq('status', 'active')
-      ]).catch(e => console.warn('Background status sync warning on sign-in:', e));
-
-      if (typeof window !== 'undefined') {
-        try {
-          const localOffers = JSON.parse(window.localStorage.getItem('parhlo_sales_offers') || '[]');
-          const updatedOffers = localOffers.map(o => {
-            if ((o.student_email || '').trim().toLowerCase() === lowerEmail && (!o.status || o.status === 'active')) {
-              return { ...o, status: 'signed_in' };
-            }
-            return o;
-          });
-          window.localStorage.setItem('parhlo_sales_offers', JSON.stringify(updatedOffers));
-        } catch (e) {}
-      }
-    }
-    
-    onLoginSuccess && onLoginSuccess(finalRole);
-    onClose();
   };
 
   return (
@@ -201,7 +221,10 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
 
         <button 
           type="button"
+          disabled={googleLoading || isSubmitting}
           onClick={async () => {
+            if (googleLoading) return;
+            setGoogleLoading(true);
             const origin = typeof window !== 'undefined' ? window.location.origin : '';
             const targetUrl = origin ? `${origin}/dashboard` : undefined;
             const { data, error } = await supabase.auth.signInWithOAuth({
@@ -215,17 +238,26 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
             });
             if (error) {
               alert("Google login error: " + error.message);
+              setGoogleLoading(false);
             }
           }}
-          className="w-full mb-6 flex items-center justify-center gap-3 bg-white border border-gray-200 py-4 rounded-xl font-bold text-gray-700 hover:bg-gray-50 transition-all shadow-sm"
+          className="w-full mb-6 flex items-center justify-center gap-3 bg-white border border-gray-200 py-4 rounded-xl font-bold text-gray-700 hover:bg-gray-50 transition-all shadow-sm disabled:opacity-50"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24">
-            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-          </svg>
-          {authMode === 'login' ? 'Login with Google' : 'Sign up with Google'}
+          {googleLoading ? (
+            <span className="flex items-center gap-2 text-sm font-bold text-gray-700">
+              <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-900"></span> Connecting Google...
+            </span>
+          ) : (
+            <>
+              <svg width="20" height="20" viewBox="0 0 24 24">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+              {authMode === 'login' ? 'Login with Google' : 'Sign up with Google'}
+            </>
+          )}
         </button>
 
         <div className="relative mb-6">
@@ -263,8 +295,19 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
             </button>
           </div>
 
-          <button type="submit" className="w-full bg-gray-900 text-white py-4 rounded-xl font-black hover:bg-green-600 transition-all shadow-xl mt-4 uppercase tracking-wider">
-            {authMode === 'login' ? 'Login' : 'Sign Up'}
+          <button 
+            type="submit" 
+            disabled={isSubmitting || googleLoading}
+            className="w-full bg-gray-900 text-white py-4 rounded-xl font-black hover:bg-green-600 transition-all shadow-xl mt-4 uppercase tracking-wider disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {isSubmitting ? (
+              <>
+                <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                <span>{authMode === 'login' ? 'Logging in...' : 'Signing up...'}</span>
+              </>
+            ) : (
+              <span>{authMode === 'login' ? 'Login' : 'Sign Up'}</span>
+            )}
           </button>
         </form>
 
