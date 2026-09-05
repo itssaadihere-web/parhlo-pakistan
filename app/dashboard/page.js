@@ -426,6 +426,12 @@ export default function StudentDashboard() {
     window.location.href = '/';
   };
 
+  const menuItems = [
+    { name: 'Dashboard', icon: <BookOpen size={20} />, id: 'overview' },
+    { name: 'My Subjects', icon: <PlayCircle size={20} />, id: 'courses' },
+    { name: 'Settings', icon: <Settings size={20} />, id: 'settings' }
+  ];
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-6">
