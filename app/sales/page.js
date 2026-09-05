@@ -31,7 +31,9 @@ import {
   PhoneCall,
   GraduationCap,
   FileSpreadsheet,
-  ArrowUpDown
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { supabase } from '@/utils/supabase';
 import InactivityTracker from '@/app/components/InactivityTracker';
@@ -56,9 +58,12 @@ export default function SalesDashboard() {
   const [students, setStudents] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
-  const [studentSort, setStudentSort] = useState('name_asc');
+  const [studentSortKey, setStudentSortKey] = useState('name');
+  const [studentSortDir, setStudentSortDir] = useState('asc');
+
   const [enrollmentSearchTerm, setEnrollmentSearchTerm] = useState('');
-  const [enrollmentSort, setEnrollmentSort] = useState('newest');
+  const [enrollmentSortKey, setEnrollmentSortKey] = useState('date');
+  const [enrollmentSortDir, setEnrollmentSortDir] = useState('desc');
 
   // Form State for Generate Offer
   const [studentEmail, setStudentEmail] = useState('');
@@ -383,6 +388,24 @@ export default function SalesDashboard() {
     router.push('/');
   };
 
+  const handleEnrollmentSort = (key) => {
+    if (enrollmentSortKey === key) {
+      setEnrollmentSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setEnrollmentSortKey(key);
+      setEnrollmentSortDir(key === 'date' ? 'desc' : 'asc');
+    }
+  };
+
+  const handleStudentSort = (key) => {
+    if (studentSortKey === key) {
+      setStudentSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setStudentSortKey(key);
+      setStudentSortDir(key === 'date' ? 'desc' : 'asc');
+    }
+  };
+
   const filteredOffers = useMemo(() => {
     let list = (offers || []).filter(o => {
       if (!o) return false;
@@ -392,17 +415,9 @@ export default function SalesDashboard() {
         String(o.course_slug || '').toLowerCase().includes(q);
     });
 
-    if (offerSort === 'newest') {
-      list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-    } else if (offerSort === 'oldest') {
-      list.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
-    } else if (offerSort === 'discount_high') {
-      list.sort((a, b) => (Number(b.discount_percent) || 0) - (Number(a.discount_percent) || 0));
-    } else if (offerSort === 'student_asc') {
-      list.sort((a, b) => String(a.student_email || '').localeCompare(String(b.student_email || '')));
-    }
+    list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
     return list;
-  }, [offers, searchTerm, offerSort]);
+  }, [offers, searchTerm]);
 
   const filteredStudents = useMemo(() => {
     let list = (students || []).filter(s => {
@@ -414,17 +429,16 @@ export default function SalesDashboard() {
         String(s.phone || '').includes(q);
     });
 
-    if (studentSort === 'name_asc') {
-      list.sort((a, b) => String(a.full_name || '').localeCompare(String(b.full_name || '')));
-    } else if (studentSort === 'name_desc') {
-      list.sort((a, b) => String(b.full_name || '').localeCompare(String(a.full_name || '')));
-    } else if (studentSort === 'email_asc') {
-      list.sort((a, b) => String(a.email || '').localeCompare(String(b.email || '')));
-    } else if (studentSort === 'newest') {
-      list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-    }
+    list.sort((a, b) => {
+      let res = 0;
+      if (studentSortKey === 'name') res = String(a.full_name || '').localeCompare(String(b.full_name || ''));
+      else if (studentSortKey === 'email') res = String(a.email || '').localeCompare(String(b.email || ''));
+      else if (studentSortKey === 'phone') res = String(a.phone || '').localeCompare(String(b.phone || ''));
+      else if (studentSortKey === 'date') res = new Date(a.created_at || 0) - new Date(b.created_at || 0);
+      return studentSortDir === 'desc' ? -res : res;
+    });
     return list;
-  }, [students, studentSearchTerm, studentSort]);
+  }, [students, studentSearchTerm, studentSortKey, studentSortDir]);
 
   const filteredPurchases = useMemo(() => {
     let list = (purchases || []).filter(p => {
@@ -435,15 +449,17 @@ export default function SalesDashboard() {
         String(p.course_slug || '').toLowerCase().includes(q);
     });
 
-    if (enrollmentSort === 'newest') {
-      list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-    } else if (enrollmentSort === 'oldest') {
-      list.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
-    } else if (enrollmentSort === 'student_asc') {
-      list.sort((a, b) => String(a.student_email || '').localeCompare(String(b.student_email || '')));
-    }
+    list.sort((a, b) => {
+      let res = 0;
+      if (enrollmentSortKey === 'student') res = String(a.student_email || '').localeCompare(String(b.student_email || ''));
+      else if (enrollmentSortKey === 'course') res = String(a.course_slug || '').localeCompare(String(b.course_slug || ''));
+      else if (enrollmentSortKey === 'plan') res = String(a.payment_plan || '').localeCompare(String(b.payment_plan || ''));
+      else if (enrollmentSortKey === 'status') res = String(a.status || '').localeCompare(String(b.status || ''));
+      else if (enrollmentSortKey === 'date') res = new Date(a.created_at || 0) - new Date(b.created_at || 0);
+      return enrollmentSortDir === 'desc' ? -res : res;
+    });
     return list;
-  }, [purchases, enrollmentSearchTerm, enrollmentSort]);
+  }, [purchases, enrollmentSearchTerm, enrollmentSortKey, enrollmentSortDir]);
 
   const menuItems = [
     { name: 'Leads (CRM)', icon: <PhoneCall size={20} />, id: 'leads' },
@@ -687,30 +703,15 @@ export default function SalesDashboard() {
                 <p className="text-gray-500 font-medium text-xs">View all active student course enrollments and payment statuses.</p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-3.5 top-3.5 text-gray-400" size={18} />
-                  <input
-                    type="text"
-                    value={enrollmentSearchTerm}
-                    onChange={(e) => setEnrollmentSearchTerm(e.target.value)}
-                    placeholder="Search email or course..."
-                    className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-medium shadow-sm"
-                  />
-                </div>
-
-                <div className="flex items-center px-3 py-3 bg-white border border-gray-200 rounded-xl text-xs font-bold text-slate-700 shadow-sm">
-                  <ArrowUpDown size={14} className="text-gray-400 mr-2 shrink-0" />
-                  <select
-                    value={enrollmentSort}
-                    onChange={(e) => setEnrollmentSort(e.target.value)}
-                    className="bg-transparent text-slate-900 font-bold text-xs focus:outline-none cursor-pointer"
-                  >
-                    <option value="newest">Newest First</option>
-                    <option value="oldest">Oldest First</option>
-                    <option value="student_asc">Student Email (A-Z)</option>
-                  </select>
-                </div>
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3.5 top-3.5 text-gray-400" size={18} />
+                <input
+                  type="text"
+                  value={enrollmentSearchTerm}
+                  onChange={(e) => setEnrollmentSearchTerm(e.target.value)}
+                  placeholder="Search email or course..."
+                  className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-medium shadow-sm"
+                />
               </div>
             </header>
 
@@ -719,13 +720,73 @@ export default function SalesDashboard() {
                 <p className="text-xs text-gray-400 text-center py-10">No course enrollments found.</p>
               ) : (
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-gray-50 text-gray-700 font-bold border-b border-gray-200">
+                  <thead className="bg-gray-50 text-gray-700 font-bold border-b border-gray-200 select-none">
                     <tr>
-                      <th className="p-3">Student Email</th>
-                      <th className="p-3">Course Slug</th>
-                      <th className="p-3">Plan</th>
-                      <th className="p-3">Status</th>
-                      <th className="p-3">Date</th>
+                      <th
+                        onClick={() => handleEnrollmentSort('student')}
+                        className="p-3 cursor-pointer hover:text-slate-900 transition-colors"
+                      >
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>Student Email</span>
+                          {enrollmentSortKey === 'student' ? (
+                            enrollmentSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleEnrollmentSort('course')}
+                        className="p-3 cursor-pointer hover:text-slate-900 transition-colors"
+                      >
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>Course Slug</span>
+                          {enrollmentSortKey === 'course' ? (
+                            enrollmentSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleEnrollmentSort('plan')}
+                        className="p-3 cursor-pointer hover:text-slate-900 transition-colors"
+                      >
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>Plan</span>
+                          {enrollmentSortKey === 'plan' ? (
+                            enrollmentSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleEnrollmentSort('status')}
+                        className="p-3 cursor-pointer hover:text-slate-900 transition-colors"
+                      >
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>Status</span>
+                          {enrollmentSortKey === 'status' ? (
+                            enrollmentSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleEnrollmentSort('date')}
+                        className="p-3 cursor-pointer hover:text-slate-900 transition-colors"
+                      >
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>Date</span>
+                          {enrollmentSortKey === 'date' ? (
+                            enrollmentSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                          )}
+                        </div>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 text-slate-900 font-medium">
@@ -760,31 +821,15 @@ export default function SalesDashboard() {
                 <p className="text-gray-500 font-medium text-xs">View all registered students on Parhlo Pakistan platform.</p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-3.5 top-3.5 text-gray-400" size={18} />
-                  <input
-                    type="text"
-                    value={studentSearchTerm}
-                    onChange={(e) => setStudentSearchTerm(e.target.value)}
-                    placeholder="Search name, email, or phone..."
-                    className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-medium shadow-sm"
-                  />
-                </div>
-
-                <div className="flex items-center px-3 py-3 bg-white border border-gray-200 rounded-xl text-xs font-bold text-slate-700 shadow-sm">
-                  <ArrowUpDown size={14} className="text-gray-400 mr-2 shrink-0" />
-                  <select
-                    value={studentSort}
-                    onChange={(e) => setStudentSort(e.target.value)}
-                    className="bg-transparent text-slate-900 font-bold text-xs focus:outline-none cursor-pointer"
-                  >
-                    <option value="name_asc">Name (A-Z)</option>
-                    <option value="name_desc">Name (Z-A)</option>
-                    <option value="email_asc">Email (A-Z)</option>
-                    <option value="newest">Recently Joined</option>
-                  </select>
-                </div>
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3.5 top-3.5 text-gray-400" size={18} />
+                <input
+                  type="text"
+                  value={studentSearchTerm}
+                  onChange={(e) => setStudentSearchTerm(e.target.value)}
+                  placeholder="Search name, email, or phone..."
+                  className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-medium shadow-sm"
+                />
               </div>
             </header>
 
@@ -793,12 +838,60 @@ export default function SalesDashboard() {
                 <p className="text-xs text-gray-400 text-center py-10">No registered students found.</p>
               ) : (
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-gray-50 text-gray-700 font-bold border-b border-gray-200">
+                  <thead className="bg-gray-50 text-gray-700 font-bold border-b border-gray-200 select-none">
                     <tr>
-                      <th className="p-3">Full Name</th>
-                      <th className="p-3">Email Address</th>
-                      <th className="p-3">Phone Number</th>
-                      <th className="p-3">Joined Date</th>
+                      <th
+                        onClick={() => handleStudentSort('name')}
+                        className="p-3 cursor-pointer hover:text-slate-900 transition-colors"
+                      >
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>Full Name</span>
+                          {studentSortKey === 'name' ? (
+                            studentSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleStudentSort('email')}
+                        className="p-3 cursor-pointer hover:text-slate-900 transition-colors"
+                      >
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>Email Address</span>
+                          {studentSortKey === 'email' ? (
+                            studentSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleStudentSort('phone')}
+                        className="p-3 cursor-pointer hover:text-slate-900 transition-colors"
+                      >
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>Phone Number</span>
+                          {studentSortKey === 'phone' ? (
+                            studentSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleStudentSort('date')}
+                        className="p-3 cursor-pointer hover:text-slate-900 transition-colors"
+                      >
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>Joined Date</span>
+                          {studentSortKey === 'date' ? (
+                            studentSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                          )}
+                        </div>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 text-slate-900 font-medium">
