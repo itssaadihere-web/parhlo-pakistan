@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -30,7 +30,8 @@ import {
   TrendingUp,
   PhoneCall,
   GraduationCap,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ArrowUpDown
 } from 'lucide-react';
 import { supabase } from '@/utils/supabase';
 import InactivityTracker from '@/app/components/InactivityTracker';
@@ -55,7 +56,9 @@ export default function SalesDashboard() {
   const [students, setStudents] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  const [studentSort, setStudentSort] = useState('name_asc');
   const [enrollmentSearchTerm, setEnrollmentSearchTerm] = useState('');
+  const [enrollmentSort, setEnrollmentSort] = useState('newest');
 
   // Form State for Generate Offer
   const [studentEmail, setStudentEmail] = useState('');
@@ -75,6 +78,7 @@ export default function SalesDashboard() {
   const [courses, setCourses] = useState([]);
   const [offers, setOffers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [offerSort, setOfferSort] = useState('newest');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -379,30 +383,67 @@ export default function SalesDashboard() {
     router.push('/');
   };
 
-  const filteredOffers = (offers || []).filter(o => {
-    if (!o) return false;
-    const q = (searchTerm || '').toLowerCase().trim();
-    return !q ||
-      String(o.student_email || '').toLowerCase().includes(q) ||
-      String(o.course_slug || '').toLowerCase().includes(q);
-  });
+  const filteredOffers = useMemo(() => {
+    let list = (offers || []).filter(o => {
+      if (!o) return false;
+      const q = (searchTerm || '').toLowerCase().trim();
+      return !q ||
+        String(o.student_email || '').toLowerCase().includes(q) ||
+        String(o.course_slug || '').toLowerCase().includes(q);
+    });
 
-  const filteredStudents = (students || []).filter(s => {
-    if (!s) return false;
-    const q = (studentSearchTerm || '').toLowerCase().trim();
-    return !q ||
-      String(s.full_name || '').toLowerCase().includes(q) ||
-      String(s.email || '').toLowerCase().includes(q) ||
-      String(s.phone || '').includes(q);
-  });
+    if (offerSort === 'newest') {
+      list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    } else if (offerSort === 'oldest') {
+      list.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+    } else if (offerSort === 'discount_high') {
+      list.sort((a, b) => (Number(b.discount_percent) || 0) - (Number(a.discount_percent) || 0));
+    } else if (offerSort === 'student_asc') {
+      list.sort((a, b) => String(a.student_email || '').localeCompare(String(b.student_email || '')));
+    }
+    return list;
+  }, [offers, searchTerm, offerSort]);
 
-  const filteredPurchases = (purchases || []).filter(p => {
-    if (!p) return false;
-    const q = (enrollmentSearchTerm || '').toLowerCase().trim();
-    return !q ||
-      String(p.student_email || '').toLowerCase().includes(q) ||
-      String(p.course_slug || '').toLowerCase().includes(q);
-  });
+  const filteredStudents = useMemo(() => {
+    let list = (students || []).filter(s => {
+      if (!s) return false;
+      const q = (studentSearchTerm || '').toLowerCase().trim();
+      return !q ||
+        String(s.full_name || '').toLowerCase().includes(q) ||
+        String(s.email || '').toLowerCase().includes(q) ||
+        String(s.phone || '').includes(q);
+    });
+
+    if (studentSort === 'name_asc') {
+      list.sort((a, b) => String(a.full_name || '').localeCompare(String(b.full_name || '')));
+    } else if (studentSort === 'name_desc') {
+      list.sort((a, b) => String(b.full_name || '').localeCompare(String(a.full_name || '')));
+    } else if (studentSort === 'email_asc') {
+      list.sort((a, b) => String(a.email || '').localeCompare(String(b.email || '')));
+    } else if (studentSort === 'newest') {
+      list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    }
+    return list;
+  }, [students, studentSearchTerm, studentSort]);
+
+  const filteredPurchases = useMemo(() => {
+    let list = (purchases || []).filter(p => {
+      if (!p) return false;
+      const q = (enrollmentSearchTerm || '').toLowerCase().trim();
+      return !q ||
+        String(p.student_email || '').toLowerCase().includes(q) ||
+        String(p.course_slug || '').toLowerCase().includes(q);
+    });
+
+    if (enrollmentSort === 'newest') {
+      list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    } else if (enrollmentSort === 'oldest') {
+      list.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+    } else if (enrollmentSort === 'student_asc') {
+      list.sort((a, b) => String(a.student_email || '').localeCompare(String(b.student_email || '')));
+    }
+    return list;
+  }, [purchases, enrollmentSearchTerm, enrollmentSort]);
 
   const menuItems = [
     { name: 'Leads (CRM)', icon: <PhoneCall size={20} />, id: 'leads' },
@@ -646,15 +687,30 @@ export default function SalesDashboard() {
                 <p className="text-gray-500 font-medium text-xs">View all active student course enrollments and payment statuses.</p>
               </div>
 
-              <div className="relative w-full sm:w-72">
-                <Search className="absolute left-3.5 top-3.5 text-gray-400" size={18} />
-                <input
-                  type="text"
-                  value={enrollmentSearchTerm}
-                  onChange={(e) => setEnrollmentSearchTerm(e.target.value)}
-                  placeholder="Search email or course..."
-                  className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-medium shadow-sm"
-                />
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3.5 top-3.5 text-gray-400" size={18} />
+                  <input
+                    type="text"
+                    value={enrollmentSearchTerm}
+                    onChange={(e) => setEnrollmentSearchTerm(e.target.value)}
+                    placeholder="Search email or course..."
+                    className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-medium shadow-sm"
+                  />
+                </div>
+
+                <div className="flex items-center px-3 py-3 bg-white border border-gray-200 rounded-xl text-xs font-bold text-slate-700 shadow-sm">
+                  <ArrowUpDown size={14} className="text-gray-400 mr-2 shrink-0" />
+                  <select
+                    value={enrollmentSort}
+                    onChange={(e) => setEnrollmentSort(e.target.value)}
+                    className="bg-transparent text-slate-900 font-bold text-xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="student_asc">Student Email (A-Z)</option>
+                  </select>
+                </div>
               </div>
             </header>
 
@@ -704,15 +760,31 @@ export default function SalesDashboard() {
                 <p className="text-gray-500 font-medium text-xs">View all registered students on Parhlo Pakistan platform.</p>
               </div>
 
-              <div className="relative w-full sm:w-72">
-                <Search className="absolute left-3.5 top-3.5 text-gray-400" size={18} />
-                <input
-                  type="text"
-                  value={studentSearchTerm}
-                  onChange={(e) => setStudentSearchTerm(e.target.value)}
-                  placeholder="Search name, email, or phone..."
-                  className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-medium shadow-sm"
-                />
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3.5 top-3.5 text-gray-400" size={18} />
+                  <input
+                    type="text"
+                    value={studentSearchTerm}
+                    onChange={(e) => setStudentSearchTerm(e.target.value)}
+                    placeholder="Search name, email, or phone..."
+                    className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-medium shadow-sm"
+                  />
+                </div>
+
+                <div className="flex items-center px-3 py-3 bg-white border border-gray-200 rounded-xl text-xs font-bold text-slate-700 shadow-sm">
+                  <ArrowUpDown size={14} className="text-gray-400 mr-2 shrink-0" />
+                  <select
+                    value={studentSort}
+                    onChange={(e) => setStudentSort(e.target.value)}
+                    className="bg-transparent text-slate-900 font-bold text-xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="name_asc">Name (A-Z)</option>
+                    <option value="name_desc">Name (Z-A)</option>
+                    <option value="email_asc">Email (A-Z)</option>
+                    <option value="newest">Recently Joined</option>
+                  </select>
+                </div>
               </div>
             </header>
 
@@ -974,16 +1046,31 @@ export default function SalesDashboard() {
                 <p className="text-gray-500 font-medium text-xs">Manage and review all custom student offers generated by the sales team.</p>
               </div>
 
-              {/* Search Bar */}
-              <div className="relative w-full sm:w-72">
-                <Search className="absolute left-3.5 top-3.5 text-gray-400" size={18} />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search student email..."
-                  className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-medium shadow-sm"
-                />
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3.5 top-3.5 text-gray-400" size={18} />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search student email..."
+                    className="w-full bg-white border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 font-medium shadow-sm"
+                  />
+                </div>
+
+                <div className="flex items-center px-3 py-3 bg-white border border-gray-200 rounded-xl text-xs font-bold text-slate-700 shadow-sm">
+                  <ArrowUpDown size={14} className="text-gray-400 mr-2 shrink-0" />
+                  <select
+                    value={offerSort}
+                    onChange={(e) => setOfferSort(e.target.value)}
+                    className="bg-transparent text-slate-900 font-bold text-xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="discount_high">Highest Discount</option>
+                    <option value="student_asc">Student Email (A-Z)</option>
+                  </select>
+                </div>
               </div>
             </header>
 

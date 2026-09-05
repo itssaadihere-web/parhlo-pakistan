@@ -87,6 +87,9 @@ export default function AdminDashboard() {
   const [paymentSort, setPaymentSort] = useState('newest');
   const [offerSort, setOfferSort] = useState('newest');
   const [studentSort, setStudentSort] = useState('name_asc');
+  const [studentSearch, setStudentSearch] = useState('');
+  const [teacherSort, setTeacherSort] = useState('name_asc');
+  const [teacherSearch, setTeacherSearch] = useState('');
   const [courseSort, setCourseSort] = useState('name_asc');
 
   // Sales Rep Management State
@@ -669,6 +672,54 @@ export default function AdminDashboard() {
 
     return list;
   }, [salesOffers, offerSearch, offerRepFilter, offerStatusFilter, offerTypeFilter, offerSort]);
+
+  const filteredTeachers = useMemo(() => {
+    let list = (teachers || []).filter(teacher => {
+      if (!teacher) return false;
+      const q = (teacherSearch || '').toLowerCase().trim();
+      if (!q) return true;
+      return (
+        String(teacher.full_name || '').toLowerCase().includes(q) ||
+        String(teacher.email || '').toLowerCase().includes(q) ||
+        String(teacher.intro || '').toLowerCase().includes(q)
+      );
+    });
+
+    if (teacherSort === 'name_asc') {
+      list.sort((a, b) => String(a.full_name || '').localeCompare(String(b.full_name || '')));
+    } else if (teacherSort === 'name_desc') {
+      list.sort((a, b) => String(b.full_name || '').localeCompare(String(a.full_name || '')));
+    } else if (teacherSort === 'email_asc') {
+      list.sort((a, b) => String(a.email || '').localeCompare(String(b.email || '')));
+    } else if (teacherSort === 'newest') {
+      list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    }
+    return list;
+  }, [teachers, teacherSearch, teacherSort]);
+
+  const filteredStudents = useMemo(() => {
+    let list = (students || []).filter(student => {
+      if (!student) return false;
+      const q = (studentSearch || '').toLowerCase().trim();
+      if (!q) return true;
+      return (
+        String(student.full_name || '').toLowerCase().includes(q) ||
+        String(student.email || '').toLowerCase().includes(q) ||
+        String(student.phone || '').toLowerCase().includes(q)
+      );
+    });
+
+    if (studentSort === 'name_asc') {
+      list.sort((a, b) => String(a.full_name || '').localeCompare(String(b.full_name || '')));
+    } else if (studentSort === 'name_desc') {
+      list.sort((a, b) => String(b.full_name || '').localeCompare(String(a.full_name || '')));
+    } else if (studentSort === 'email_asc') {
+      list.sort((a, b) => String(a.email || '').localeCompare(String(b.email || '')));
+    } else if (studentSort === 'newest') {
+      list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    }
+    return list;
+  }, [students, studentSearch, studentSort]);
 
   const handleBulkAssignUnassigned = async () => {
     const unassignedLeads = crmLeads.filter(l => !l.assigned_to);
@@ -1788,11 +1839,17 @@ export default function AdminDashboard() {
                       const rawPrice = matchedCourse ? parsePrice(matchedCourse.price) : 0;
                       
                       const emailLower = String(offer.sales_email || '').toLowerCase();
-                      const issuerName = emailLower.includes('faiz') ? 'Faiz Ali' :
-                        emailLower.includes('nabiha') ? 'Nabiha Irfan' :
-                        emailLower.includes('sarina') ? 'Sarina Saleem' :
-                        emailLower.includes('faria') ? 'Faria Ahmed' :
-                        emailLower.includes('admin') ? 'Admin Portal' : (offer.sales_email || 'Staff');
+                      const isFaiz = emailLower.includes('faiz');
+                      const isNabiha = emailLower.includes('nabiha');
+                      const isSarina = emailLower.includes('sarina');
+                      const isFaria = emailLower.includes('faria');
+                      const isAdminIssuer = emailLower.includes('admin');
+
+                      const issuerName = isFaiz ? 'Faiz Ali' :
+                        isNabiha ? 'Nabiha Irfan' :
+                        isSarina ? 'Sarina Saleem' :
+                        isFaria ? 'Faria Ahmed' :
+                        isAdminIssuer ? 'Admin Portal' : (offer.sales_email || 'Staff');
 
                       const createdDate = new Date(offer.created_at || Date.now());
                       const dateFormatted = createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -1843,7 +1900,12 @@ export default function AdminDashboard() {
                           <td className="py-4 px-4">
                             <div className="flex items-center gap-2">
                               <span className={`px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
-                                isFaiz ? 'bg-blue-100 text-blue-800' : isNabiha ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-800'
+                                isFaiz ? 'bg-blue-100 text-blue-800' :
+                                isNabiha ? 'bg-purple-100 text-purple-800' :
+                                isSarina ? 'bg-amber-100 text-amber-800' :
+                                isFaria ? 'bg-pink-100 text-pink-800' :
+                                isAdminIssuer ? 'bg-emerald-100 text-emerald-800' :
+                                'bg-slate-100 text-slate-800'
                               }`}>
                                 <User size={12} />
                                 {issuerName}
@@ -2467,13 +2529,43 @@ export default function AdminDashboard() {
             </div>
 
             <div className="bg-white rounded-[2rem] border border-gray-100 p-8 shadow-sm">
-              <h2 className="text-xl font-bold text-gray-900 mb-6">Registered Teachers</h2>
-              {teachers.length === 0 ? (
-                <p className="text-gray-500 italic">No teachers found. Add one above.</p>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+                <h2 className="text-xl font-bold text-gray-900">Registered Teachers ({filteredTeachers.length})</h2>
+                
+                <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                  <div className="relative flex-1 sm:w-60">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={teacherSearch}
+                      onChange={(e) => setTeacherSearch(e.target.value)}
+                      placeholder="Search teachers..."
+                      className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                    />
+                  </div>
+
+                  <div className="flex items-center px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-slate-700">
+                    <ArrowUpDown size={13} className="text-gray-400 mr-2 shrink-0" />
+                    <select
+                      value={teacherSort}
+                      onChange={(e) => setTeacherSort(e.target.value)}
+                      className="bg-transparent text-slate-900 font-bold text-xs focus:outline-none cursor-pointer"
+                    >
+                      <option value="name_asc">Name (A-Z)</option>
+                      <option value="name_desc">Name (Z-A)</option>
+                      <option value="email_asc">Email (A-Z)</option>
+                      <option value="newest">Recently Added</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {filteredTeachers.length === 0 ? (
+                <p className="text-gray-500 italic py-6 text-center text-sm">No matching teachers found.</p>
               ) : (
                 <div className="space-y-4">
-                  {teachers.map(teacher => (
-                    <div key={teacher.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
+                  {filteredTeachers.map(teacher => (
+                    <div key={teacher.id || teacher.email} className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
                       <div>
                         <p className="font-bold text-gray-900">{teacher.full_name}</p>
                         <p className="text-xs text-gray-500">{teacher.email}</p>
@@ -2516,13 +2608,43 @@ export default function AdminDashboard() {
             <p className="text-gray-500 mb-10">View and manage all registered students, regardless of enrollment status.</p>
 
             <div className="bg-white rounded-[2rem] border border-gray-100 p-8 shadow-sm">
-              <h2 className="text-xl font-bold text-gray-900 mb-6">Registered Students</h2>
-              {students.length === 0 ? (
-                <p className="text-gray-500 italic">No students found.</p>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+                <h2 className="text-xl font-bold text-gray-900">Registered Students ({filteredStudents.length})</h2>
+
+                <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                  <div className="relative flex-1 sm:w-60">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={studentSearch}
+                      onChange={(e) => setStudentSearch(e.target.value)}
+                      placeholder="Search students..."
+                      className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                    />
+                  </div>
+
+                  <div className="flex items-center px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-slate-700">
+                    <ArrowUpDown size={13} className="text-gray-400 mr-2 shrink-0" />
+                    <select
+                      value={studentSort}
+                      onChange={(e) => setStudentSort(e.target.value)}
+                      className="bg-transparent text-slate-900 font-bold text-xs focus:outline-none cursor-pointer"
+                    >
+                      <option value="name_asc">Name (A-Z)</option>
+                      <option value="name_desc">Name (Z-A)</option>
+                      <option value="email_asc">Email (A-Z)</option>
+                      <option value="newest">Recently Joined</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {filteredStudents.length === 0 ? (
+                <p className="text-gray-500 italic py-6 text-center text-sm">No matching students found.</p>
               ) : (
                 <div className="space-y-4">
-                  {students.map(student => (
-                    <div key={student.id} className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
+                  {filteredStudents.map(student => (
+                    <div key={student.id || student.email} className="flex justify-between items-center bg-gray-50 p-4 rounded-xl border border-gray-100">
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden shrink-0">
                           {student.image ? (
