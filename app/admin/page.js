@@ -1169,19 +1169,18 @@ export default function AdminDashboard() {
     });
   };
 
-  if (!isAdmin) return null;
-
   const isRealPayment = (p) => {
     // A record is a financial payment transaction if an amount was paid (>0) or a payment receipt was uploaded.
     // Free trial activations or zero-amount initial offers without receipts are access enrollments, not monetary payment approvals.
+    if (!p) return false;
     if ((p.paymentPlan === 'free_trial' || p.amountPaid === 0) && !p.receiptImage && (!p.amountPaid || p.amountPaid === 0)) {
       return false;
     }
     return true;
   };
 
-  const pendingApprovals = payments.filter(p => p.status === 'pending' && (p.receiptImage || (p.amountPaid && p.amountPaid > 0)));
-  const approvedPayments = payments.filter(p => p.status === 'approved' && isRealPayment(p));
+  const pendingApprovals = (payments || []).filter(p => p && p.status === 'pending' && (p.receiptImage || (p.amountPaid && p.amountPaid > 0)));
+  const approvedPayments = (payments || []).filter(p => p && p.status === 'approved' && isRealPayment(p));
 
   const filteredApprovedPayments = useMemo(() => {
     let list = (payments || []).filter(p => p && p.status === 'approved' && isRealPayment(p));
@@ -1231,6 +1230,8 @@ export default function AdminDashboard() {
     { name: 'Payments', icon: <CreditCard size={20} />, id: 'payments' },
     { name: 'Settings', icon: <ShieldCheck size={20} />, id: 'settings' }
   ];
+
+  if (!isAdmin) return null;
 
   return (
     <div className="flex min-h-screen bg-[#F8FAFC] font-sans text-slate-900">
