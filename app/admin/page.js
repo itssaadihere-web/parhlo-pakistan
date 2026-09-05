@@ -103,6 +103,10 @@ export default function AdminDashboard() {
   const [studentSortDir, setStudentSortDir] = useState('asc');
   const [studentSearch, setStudentSearch] = useState('');
 
+  const [analyticsSearch, setAnalyticsSearch] = useState('');
+  const [analyticsSortKey, setAnalyticsSortKey] = useState('hours');
+  const [analyticsSortDir, setAnalyticsSortDir] = useState('desc');
+
   const handleCourseSort = (key) => {
     if (courseSortKey === key) {
       setCourseSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -145,6 +149,15 @@ export default function AdminDashboard() {
     } else {
       setStudentSortKey(key);
       setStudentSortDir('asc');
+    }
+  };
+
+  const handleAnalyticsSort = (key) => {
+    if (analyticsSortKey === key) {
+      setAnalyticsSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setAnalyticsSortKey(key);
+      setAnalyticsSortDir(key === 'hours' ? 'desc' : 'asc');
     }
   };
 
@@ -787,6 +800,109 @@ export default function AdminDashboard() {
     });
     return list;
   }, [students, studentSearch, studentSortKey, studentSortDir]);
+
+  const analyticsData = useMemo(() => {
+    const approved = (payments || []).filter(p => p && p.status === 'approved');
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    const dayOfYear = Math.floor((now - startOfYear) / (24 * 60 * 60 * 1000));
+    const weekNum = Math.ceil((dayOfYear + startOfYear.getDay() + 1) / 7);
+    const currentWeekId = `${now.getFullYear()}_W${weekNum}`;
+
+    let rows = approved.map(p => {
+      const cleanEmail = String(p.userEmail || '').trim().toLowerCase();
+      const cleanSlug = String(p.courseSlug || '').trim().toLowerCase();
+
+      const studentProgress = (videoProgressList || []).filter(row => {
+        if (!row) return false;
+        const rEmail = String(row.student_email || '').trim().toLowerCase();
+        const rSlug = String(row.course_slug || '').trim().toLowerCase();
+        const matchEmail = rEmail === cleanEmail;
+        const cleanSlugBase = cleanSlug.replace(/-class-\d+/g, '').replace(/-smart/g, '');
+        const rSlugBase = rSlug.replace(/-class-\d+/g, '').replace(/-smart/g, '');
+        const matchSlug = rSlug === cleanSlug || cleanSlug.includes(rSlug) || rSlug.includes(cleanSlug) || cleanSlugBase === rSlugBase;
+        return matchEmail && matchSlug;
+      });
+
+      const dbTotalSec = studentProgress.reduce((acc, r) => acc + (Number(r.watched_seconds) || 0), 0);
+
+      let localTotalSec = 0;
+      let localWeeklySec = 0;
+      if (typeof window !== 'undefined') {
+        const key = `parhlo_watch_${p.userEmail}_${p.courseSlug}`;
+        try {
+          const watchMap = JSON.parse(window.localStorage.getItem(key) || '{}');
+          localTotalSec = Object.values(watchMap).reduce((a, b) => a + (Number(b) || 0), 0);
+        } catch (e) {}
+
+        const weekKey = `parhlo_weekly_${p.userEmail}_${p.courseSlug}`;
+        try {
+          const weeklyMap = JSON.parse(window.localStorage.getItem(weekKey) || '{}');
+          localWeeklySec = Number(weeklyMap[currentWeekId]) || 0;
+        } catch (e) {}
+      }
+
+      const totalSec = Math.max(dbTotalSec, localTotalSec);
+      const hrs = (totalSec / 3600).toFixed(1);
+      const mins = Math.round(totalSec / 60);
+
+      const dbWeeklySec = studentProgress
+        .filter(r => r.last_watched_at && new Date(r.last_watched_at) >= startOfWeek)
+        .reduce((acc, r) => acc + (Number(r.watched_seconds) || 0), 0);
+
+      const weeklySec = Math.max(dbWeeklySec, localWeeklySec);
+
+      const courseObj = (adminCourses || []).find(c => c && c.slug === p.courseSlug);
+      const totalLectures = courseObj?.lectures?.length || 1;
+      const estimatedCourseSec = totalLectures * 25 * 60;
+      const weeklyLimitSec = Math.round(estimatedCourseSec / 12);
+      const oneMonthLimitSec = Math.round(estimatedCourseSec / 3);
+
+      const isFreeTrial = p.paymentPlan === 'free_trial';
+      const isFullPlan = p.paymentPlan === 'full';
+      const isWeeklyQuotaMet = !isFullPlan && weeklySec >= weeklyLimitSec;
+      const isMonthTrialEnded = isFreeTrial && totalSec >= oneMonthLimitSec;
+
+      return {
+        ...p,
+        totalSec,
+        hrs,
+        mins,
+        weeklySec,
+        weeklyLimitSec,
+        oneMonthLimitSec,
+        isFreeTrial,
+        isFullPlan,
+        isWeeklyQuotaMet,
+        isMonthTrialEnded
+      };
+    });
+
+    if (analyticsSearch) {
+      const q = analyticsSearch.toLowerCase().trim();
+      rows = rows.filter(r => 
+        String(r.userEmail || '').toLowerCase().includes(q) ||
+        String(r.courseName || '').toLowerCase().includes(q) ||
+        String(r.paymentPlan || '').toLowerCase().includes(q)
+      );
+    }
+
+    rows.sort((a, b) => {
+      let res = 0;
+      if (analyticsSortKey === 'student') res = String(a.userEmail || '').localeCompare(String(b.userEmail || ''));
+      else if (analyticsSortKey === 'course') res = String(a.courseName || '').localeCompare(String(b.courseName || ''));
+      else if (analyticsSortKey === 'plan') res = String(a.paymentPlan || '').localeCompare(String(b.paymentPlan || ''));
+      else if (analyticsSortKey === 'hours') res = (a.totalSec || 0) - (b.totalSec || 0);
+      else if (analyticsSortKey === 'status') res = String(a.status || '').localeCompare(String(b.status || ''));
+      return analyticsSortDir === 'desc' ? -res : res;
+    });
+
+    return rows;
+  }, [payments, videoProgressList, adminCourses, analyticsSearch, analyticsSortKey, analyticsSortDir]);
 
   const handleBulkAssignUnassigned = async () => {
     const unassignedLeads = crmLeads.filter(l => !l.assigned_to);
@@ -2164,118 +2280,127 @@ export default function AdminDashboard() {
                 <h1 className="text-3xl font-black text-slate-900">Student Study Performance & Watch Analytics</h1>
                 <p className="text-gray-500 mt-1">Monitor study hours, completion rates, and free trial 1/12th watch limits for all enrolled students.</p>
               </div>
-              <button 
-                onClick={async () => {
-                  await fetchData();
-                  alert('Analytics refreshed and synced with database!');
-                }} 
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition self-start sm:self-auto cursor-pointer"
-              >
-                🔄 Sync & Refresh Analytics
-              </button>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative w-full sm:w-64">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={analyticsSearch}
+                    onChange={(e) => setAnalyticsSearch(e.target.value)}
+                    placeholder="Search student, course, plan..."
+                    className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium shadow-sm"
+                  />
+                </div>
+                <button 
+                  onClick={async () => {
+                    await fetchData();
+                    alert('Analytics refreshed and synced with database!');
+                  }} 
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition cursor-pointer shrink-0"
+                >
+                  🔄 Sync & Refresh
+                </button>
+              </div>
             </div>
 
             <div className="bg-white rounded-[2.5rem] border border-gray-100 p-8 shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead>
-                    <tr className="border-b border-gray-100 text-xs uppercase font-black text-gray-400">
-                      <th className="pb-4">Student Email</th>
-                      <th className="pb-4">Enrolled Course</th>
-                      <th className="pb-4">Plan Type</th>
-                      <th className="pb-4">Hours Watched</th>
+                    <tr className="border-b border-gray-100 text-xs uppercase font-black text-gray-400 select-none">
+                      <th
+                        onClick={() => handleAnalyticsSort('student')}
+                        className="pb-4 cursor-pointer hover:text-slate-900 transition-colors"
+                      >
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>Student Email</span>
+                          {analyticsSortKey === 'student' ? (
+                            analyticsSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleAnalyticsSort('course')}
+                        className="pb-4 cursor-pointer hover:text-slate-900 transition-colors"
+                      >
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>Enrolled Course</span>
+                          {analyticsSortKey === 'course' ? (
+                            analyticsSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleAnalyticsSort('plan')}
+                        className="pb-4 cursor-pointer hover:text-slate-900 transition-colors"
+                      >
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>Plan Type</span>
+                          {analyticsSortKey === 'plan' ? (
+                            analyticsSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleAnalyticsSort('hours')}
+                        className="pb-4 cursor-pointer hover:text-slate-900 transition-colors"
+                      >
+                        <div className="inline-flex items-center gap-1.5">
+                          <span>Hours Watched</span>
+                          {analyticsSortKey === 'hours' ? (
+                            analyticsSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                          )}
+                        </div>
+                      </th>
                       <th className="pb-4">1/12th Trial Status</th>
-                      <th className="pb-4 text-right">Status</th>
+                      <th
+                        onClick={() => handleAnalyticsSort('status')}
+                        className="pb-4 text-right cursor-pointer hover:text-slate-900 transition-colors"
+                      >
+                        <div className="inline-flex items-center justify-end gap-1.5">
+                          <span>Status</span>
+                          {analyticsSortKey === 'status' ? (
+                            analyticsSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                          ) : (
+                            <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                          )}
+                        </div>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 font-medium">
-                    {payments.filter(p => p.status === 'approved').map(p => {
-                      const cleanEmail = (p.userEmail || '').trim().toLowerCase();
-                      const cleanSlug = (p.courseSlug || '').trim().toLowerCase();
-
-                      // Filter progress from Supabase with flexible slug matching
-                      const studentProgress = videoProgressList.filter(row => {
-                        const rEmail = (row.student_email || '').trim().toLowerCase();
-                        const rSlug = (row.course_slug || '').trim().toLowerCase();
-                        const matchEmail = rEmail === cleanEmail;
-                        const cleanSlugBase = cleanSlug.replace(/-class-\d+/g, '').replace(/-smart/g, '');
-                        const rSlugBase = rSlug.replace(/-class-\d+/g, '').replace(/-smart/g, '');
-                        const matchSlug = rSlug === cleanSlug || cleanSlug.includes(rSlug) || rSlug.includes(cleanSlug) || cleanSlugBase === rSlugBase;
-                        return matchEmail && matchSlug;
-                      });
-
-                      let dbTotalSec = studentProgress.reduce((acc, r) => acc + (Number(r.watched_seconds) || 0), 0);
-
-                      // Local storage fallback for admin's local testing
-                      const key = `parhlo_watch_${p.userEmail}_${p.courseSlug}`;
-                      let localTotalSec = 0;
-                      try {
-                        const watchMap = JSON.parse(window.localStorage.getItem(key) || '{}');
-                        localTotalSec = Object.values(watchMap).reduce((a, b) => a + (Number(b) || 0), 0);
-                      } catch (e) {}
-
-                      const totalSec = Math.max(dbTotalSec, localTotalSec);
-                      const hrs = (totalSec / 3600).toFixed(1);
-                      const mins = Math.round(totalSec / 60);
-
-                      // Weekly calculation from Supabase
-                      const now = new Date();
-                      const startOfWeek = new Date(now);
-                      startOfWeek.setDate(now.getDate() - now.getDay());
-                      startOfWeek.setHours(0, 0, 0, 0);
-
-                      const dbWeeklySec = studentProgress
-                        .filter(r => r.last_watched_at && new Date(r.last_watched_at) >= startOfWeek)
-                        .reduce((acc, r) => acc + (Number(r.watched_seconds) || 0), 0);
-
-                      const startOfYear = new Date(now.getFullYear(), 0, 1);
-                      const dayOfYear = Math.floor((now - startOfYear) / (24 * 60 * 60 * 1000));
-                      const weekNum = Math.ceil((dayOfYear + startOfYear.getDay() + 1) / 7);
-                      const currentWeekId = `${now.getFullYear()}_W${weekNum}`;
-
-                      const weekKey = `parhlo_weekly_${p.userEmail}_${p.courseSlug}`;
-                      let localWeeklySec = 0;
-                      try {
-                        const weeklyMap = JSON.parse(window.localStorage.getItem(weekKey) || '{}');
-                        localWeeklySec = Number(weeklyMap[currentWeekId]) || 0;
-                      } catch (e) {}
-
-                      const weeklySec = Math.max(dbWeeklySec, localWeeklySec);
-
-                      const courseObj = adminCourses.find(c => c.slug === p.courseSlug);
-                      const totalLectures = courseObj?.lectures?.length || 1;
-                      const estimatedCourseSec = totalLectures * 25 * 60;
-                      const weeklyLimitSec = Math.round(estimatedCourseSec / 12);
-                      const oneMonthLimitSec = Math.round(estimatedCourseSec / 3);
-
-                      const isFreeTrial = p.paymentPlan === 'free_trial';
-                      const isFullPlan = p.paymentPlan === 'full';
-                      const isWeeklyQuotaMet = !isFullPlan && weeklySec >= weeklyLimitSec;
-                      const isMonthTrialEnded = isFreeTrial && totalSec >= oneMonthLimitSec;
-
+                    {analyticsData.map(p => {
                       return (
                         <tr key={p.id} className="hover:bg-gray-50/50">
                           <td className="py-4 font-bold text-slate-900">{p.userEmail}</td>
                           <td className="py-4 text-gray-600">{p.courseName}</td>
                           <td className="py-4">
                             <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                              isFreeTrial ? 'bg-purple-100 text-purple-800' : isFullPlan ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+                              p.isFreeTrial ? 'bg-purple-100 text-purple-800' : p.isFullPlan ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
                             }`}>
-                              {isFreeTrial ? '1-Month Free Access' : `${p.paymentPlan} Plan`}
+                              {p.isFreeTrial ? '1-Month Free Access' : `${p.paymentPlan} Plan`}
                             </span>
                           </td>
-                          <td className="py-4 font-mono font-bold text-slate-900">{hrs} hrs ({mins} mins)</td>
+                          <td className="py-4 font-mono font-bold text-slate-900">{p.hrs} hrs ({p.mins} mins)</td>
                           <td className="py-4">
-                            {isFullPlan ? (
+                            {p.isFullPlan ? (
                               <span className="text-xs font-bold text-emerald-600">Full Unrestricted Access</span>
                             ) : (
                               <div className="space-y-0.5 text-xs">
-                                <span className={`block font-bold ${isWeeklyQuotaMet ? 'text-amber-600' : 'text-slate-700'}`}>
-                                  Weekly: {Math.round(weeklySec / 60)}m / {Math.round(weeklyLimitSec / 60)}m {isWeeklyQuotaMet && '(Pace Met)'}
+                                <span className={`block font-bold ${p.isWeeklyQuotaMet ? 'text-amber-600' : 'text-slate-700'}`}>
+                                  Weekly: {Math.round(p.weeklySec / 60)}m / {Math.round(p.weeklyLimitSec / 60)}m {p.isWeeklyQuotaMet && '(Pace Met)'}
                                 </span>
-                                {isFreeTrial && (
-                                  <span className={`block font-bold ${isMonthTrialEnded ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                    Free Trial 1/3rd: {mins}m / {Math.round(oneMonthLimitSec / 60)}m {isMonthTrialEnded && '(Ended)'}
+                                {p.isFreeTrial && (
+                                  <span className={`block font-bold ${p.isMonthTrialEnded ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                    Free Trial 1/3rd: {p.mins}m / {Math.round(p.oneMonthLimitSec / 60)}m {p.isMonthTrialEnded && '(Ended)'}
                                   </span>
                                 )}
                               </div>
@@ -2287,9 +2412,9 @@ export default function AdminDashboard() {
                         </tr>
                       );
                     })}
-                    {payments.filter(p => p.status === 'approved').length === 0 && (
+                    {analyticsData.length === 0 && (
                       <tr>
-                        <td colSpan="6" className="py-8 text-center text-gray-400">No approved student enrollments found.</td>
+                        <td colSpan="6" className="py-8 text-center text-gray-400">No student study analytics records found matching criteria.</td>
                       </tr>
                     )}
                   </tbody>
