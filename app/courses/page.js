@@ -16,6 +16,7 @@ import {
 import { getDeterministicRating } from '@/utils/courseHelpers';
 import { formatCurrency, parsePrice } from '@/utils/currencyHelpers';
 import { supabase } from '@/utils/supabase';
+import { determineUserRole, getPortalPathForRole } from '@/utils/authHelpers';
 
 export default function AllCourses() {
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -26,13 +27,7 @@ export default function AllCourses() {
 
   const handleLoginSuccess = (role) => {
     setShowAuthModal(false);
-    if (role === 'admin') {
-      router.push('/admin');
-    } else if (role === 'teacher') {
-      router.push('/teacher');
-    } else {
-      router.push('/dashboard');
-    }
+    router.push(getPortalPathForRole(role));
   };
 
   const [courses, setCourses] = useState([]);
@@ -62,55 +57,108 @@ export default function AllCourses() {
   };
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    
-    const isAdmin = window.localStorage.getItem('parhloAdmin') === 'true';
-    const storedRole = window.localStorage.getItem('parhloRole');
-    const email = window.localStorage.getItem('currentUserEmail');
-    if (isAdmin || storedRole === 'admin') setUserRole('admin');
-    else if (storedRole === 'teacher') setUserRole('teacher');
-    else if (email) setUserRole('student');
+    if (typeof window !== 'undefined') {
+      const email = window.localStorage.getItem('currentUserEmail');
+      const storedRole = window.localStorage.getItem('parhloRole');
+      const isAdmin = window.localStorage.getItem('parhloAdmin') === 'true';
+      
+      if (isAdmin) {
+        setUserRole('admin');
+      } else if (storedRole) {
+        setUserRole(storedRole);
+      } else if (email) {
+        setUserRole(determineUserRole(email));
+      }
 
-    fetchAllCourses();
+      fetchAllCourses();
+    }
   }, []);
 
   const fetchAllCourses = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('courses')
-      .select('*')
-      .order('created_at', { ascending: false });
+    try {
+      // 1. Fetch from same-origin API route (resilient against Pakistani ISP blocks)
+      const res = await fetch('/api/courses');
+      let data = null;
+      if (res.ok) {
+        data = await res.json();
+      } else {
+        // Fallback directly to Supabase client
+        const { data: sbData, error } = await supabase
+          .from('courses')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        data = sbData;
+      }
 
-    if (error) {
-      console.error('Error fetching courses:', error);
-      setCoursesError(error.message || JSON.stringify(error));
-      setCourses([]);
-    } else if (data) {
-      setCoursesError(null);
-      const persistedCourses = data.map((course) => {
-        const studentsCount = parseInt(course.students) || 0;
-        const originalPrice = parsePrice(course.price);
-        const discountPercent = parseFloat(String(course.discount || '').replace(/[^0-9.]/g, '')) || 0;
-        const salePrice = discountPercent > 0 ? Math.round(originalPrice * (1 - discountPercent / 100)) : originalPrice;
-        
-        return {
-          title: course.name,
-          price: originalPrice,
-          salePrice: salePrice,
-          discount: discountPercent > 0 ? discountPercent : 0,
-          students: studentsCount >= 5 ? String(studentsCount) : null,
-          rating: getDeterministicRating(course.slug),
-          tag: course.tag || 'New',
-          slug: course.slug,
-          thumbnail: course.thumbnail,
-          instructorImage: course.instructorImage,
-          imageClass: 'from-slate-900 via-slate-700 to-green-600',
-          description: course.category ? `${course.category} course` : 'New course content available now.',
-        };
-      });
-      setCourses(persistedCourses);
+      if (data && data.length > 0) {
+        setCoursesError(null);
+        const persistedCourses = data.map((course) => {
+          const studentsCount = parseInt(course.students) || 0;
+          const originalPrice = parsePrice(course.price);
+          const discountPercent = parseFloat(String(course.discount || '').replace(/[^0-9.]/g, '')) || 0;
+          const salePrice = discountPercent > 0 ? Math.round(originalPrice * (1 - discountPercent / 100)) : originalPrice;
+          
+          return {
+            title: course.name,
+            price: originalPrice,
+            salePrice: salePrice,
+            discount: discountPercent > 0 ? discountPercent : 0,
+            students: studentsCount >= 5 ? String(studentsCount) : null,
+            rating: getDeterministicRating(course.slug),
+            tag: course.tag || 'New',
+            slug: course.slug,
+            thumbnail: course.thumbnail,
+            instructorImage: course.instructorimage || course.instructorImage,
+            imageClass: 'from-slate-900 via-slate-700 to-green-600',
+            description: course.category ? `${course.category} course` : 'New course content available now.',
+          };
+        });
+        setCourses(persistedCourses);
+      } else {
+        setCourses([]);
+      }
+    } catch (err) {
+      console.error('Error fetching courses:', err);
+      // Try direct Supabase fetch as last resort
+      try {
+        const { data: sbData } = await supabase
+          .from('courses')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (sbData && sbData.length > 0) {
+          const persistedCourses = sbData.map((course) => {
+            const studentsCount = parseInt(course.students) || 0;
+            const originalPrice = parsePrice(course.price);
+            const discountPercent = parseFloat(String(course.discount || '').replace(/[^0-9.]/g, '')) || 0;
+            const salePrice = discountPercent > 0 ? Math.round(originalPrice * (1 - discountPercent / 100)) : originalPrice;
+            return {
+              title: course.name,
+              price: originalPrice,
+              salePrice: salePrice,
+              discount: discountPercent > 0 ? discountPercent : 0,
+              students: studentsCount >= 5 ? String(studentsCount) : null,
+              rating: getDeterministicRating(course.slug),
+              tag: course.tag || 'New',
+              slug: course.slug,
+              thumbnail: course.thumbnail,
+              instructorImage: course.instructorimage || course.instructorImage,
+              imageClass: 'from-slate-900 via-slate-700 to-green-600',
+              description: course.category ? `${course.category} course` : 'New course content available now.',
+            };
+          });
+          setCourses(persistedCourses);
+          setCoursesError(null);
+        } else {
+          setCoursesError('Unable to load courses. Please check your internet connection.');
+        }
+      } catch (fallbackErr) {
+        setCoursesError('Unable to load courses. Please check your internet connection.');
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -142,7 +190,13 @@ export default function AllCourses() {
           ) : userRole === 'teacher' ? (
             <Link href="/teacher" className="mr-4">
               <button className="bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-blue-700 transition-all shadow-lg">
-                Teacher Panel
+                Teacher Portal
+              </button>
+            </Link>
+          ) : userRole === 'sales' ? (
+            <Link href="/sales" className="mr-4">
+              <button className="bg-purple-600 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-purple-700 transition-all shadow-lg">
+                Sales Portal
               </button>
             </Link>
           ) : userRole === 'student' ? (
@@ -177,7 +231,13 @@ export default function AllCourses() {
             ) : userRole === 'teacher' ? (
               <Link href="/teacher">
                 <button className="w-full bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all">
-                  Teacher Panel
+                  Teacher Portal
+                </button>
+              </Link>
+            ) : userRole === 'sales' ? (
+              <Link href="/sales">
+                <button className="w-full bg-purple-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-purple-700 transition-all">
+                  Sales Portal
                 </button>
               </Link>
             ) : userRole === 'student' ? (
@@ -206,8 +266,14 @@ export default function AllCourses() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 mb-20">
           {coursesError ? (
-            <div className="col-span-full rounded-[3rem] border border-red-200 bg-red-50 p-16 text-center text-red-500">
-              Error fetching courses: {coursesError}
+            <div className="col-span-full rounded-[3rem] border border-red-100 bg-red-50/60 p-12 text-center">
+              <p className="text-red-600 font-semibold mb-4">{coursesError}</p>
+              <button 
+                onClick={fetchAllCourses}
+                className="bg-gray-900 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-green-600 transition-all shadow-md"
+              >
+                Reload Courses
+              </button>
             </div>
           ) : loading ? (
             Array.from({ length: 3 }).map((_, i) => (

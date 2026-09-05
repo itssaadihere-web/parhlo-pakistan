@@ -46,6 +46,7 @@ import { formatCurrency, parsePrice } from '@/utils/currencyHelpers';
 import LeadExcelImporter from '@/app/components/crm/LeadExcelImporter';
 import LeadKanbanBoard from '@/app/components/crm/LeadKanbanBoard';
 import LeadDetailModal from '@/app/components/crm/LeadDetailModal';
+import { determineUserRole, getPortalPathForRole, ADMIN_EMAIL, clearUserSession } from '@/utils/authHelpers';
 
 
 export default function AdminDashboard() {
@@ -112,9 +113,17 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    const email = (window.localStorage.getItem('currentUserEmail') || '').trim().toLowerCase();
     const admin = window.localStorage.getItem('parhloAdmin') === 'true';
-    if (!admin) {
-      router.replace('/');
+    
+    // Strict Admin check: must be Parhlo Pakistan admin email
+    if (!admin || email !== ADMIN_EMAIL.toLowerCase()) {
+      if (email) {
+        const userRole = determineUserRole(email);
+        router.replace(getPortalPathForRole(userRole));
+      } else {
+        router.replace('/');
+      }
       return;
     }
     setIsAdmin(true);
@@ -123,7 +132,7 @@ export default function AdminDashboard() {
     
     // Fetch admin phone from users table
     const fetchAdminProfile = async () => {
-      const { data } = await supabase.from('users').select('phone').eq('email', 'parhlo.pakistan.edu@gmail.com').single();
+      const { data } = await supabase.from('users').select('phone').eq('email', ADMIN_EMAIL).single();
       if (data && data.phone) {
         setAdminPhone(data.phone);
       }
@@ -724,12 +733,8 @@ export default function AdminDashboard() {
     } catch (e) {
       console.error(e);
     }
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('parhloAdmin');
-      window.localStorage.removeItem('parhloRole');
-      window.localStorage.removeItem('currentUserEmail');
-      window.location.href = '/';
-    }
+    clearUserSession();
+    window.location.href = '/';
   };
 
   const handleDeleteCourse = (course) => {

@@ -16,7 +16,9 @@ import {
   X
 } from 'lucide-react';
 
-export default function AboutPage() {
+import { determineUserRole, getPortalPathForRole } from '@/utils/authHelpers';
+
+export default function About() {
   // State to control the visibility of the login/signup popup
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [userRole, setUserRole] = useState(null);
@@ -25,12 +27,17 @@ export default function AboutPage() {
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
-      const isAdmin = window.localStorage.getItem('parhloAdmin') === 'true';
-      const storedRole = window.localStorage.getItem('parhloRole');
       const email = window.localStorage.getItem('currentUserEmail');
-      if (isAdmin || storedRole === 'admin') setUserRole('admin');
-      else if (storedRole === 'teacher') setUserRole('teacher');
-      else if (email) setUserRole('student');
+      const storedRole = window.localStorage.getItem('parhloRole');
+      const isAdmin = window.localStorage.getItem('parhloAdmin') === 'true';
+
+      if (isAdmin) {
+        setUserRole('admin');
+      } else if (storedRole) {
+        setUserRole(storedRole);
+      } else if (email) {
+        setUserRole(determineUserRole(email));
+      }
     }
   }, []);
   
@@ -40,13 +47,7 @@ export default function AboutPage() {
 
   const handleLoginSuccess = (role) => {
     setShowAuthModal(false);
-    if (role === 'admin') {
-      router.push('/admin');
-    } else if (role === 'teacher') {
-      router.push('/teacher');
-    } else {
-      router.push('/dashboard');
-    }
+    router.push(getPortalPathForRole(role));
   };
 
   const LandingNav = () => (
@@ -83,7 +84,13 @@ export default function AboutPage() {
         ) : userRole === 'teacher' ? (
           <Link href="/teacher" className="mr-4">
             <button className="bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-blue-700 transition-all shadow-lg">
-              Teacher Panel
+              Teacher Portal
+            </button>
+          </Link>
+        ) : userRole === 'sales' ? (
+          <Link href="/sales" className="mr-4">
+            <button className="bg-purple-600 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-purple-700 transition-all shadow-lg">
+              Sales Portal
             </button>
           </Link>
         ) : userRole === 'student' ? (
@@ -117,7 +124,13 @@ export default function AboutPage() {
             ) : userRole === 'teacher' ? (
               <Link href="/teacher">
                 <button className="w-full bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all">
-                  Teacher Panel
+                  Teacher Portal
+                </button>
+              </Link>
+            ) : userRole === 'sales' ? (
+              <Link href="/sales">
+                <button className="w-full bg-purple-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-purple-700 transition-all">
+                  Sales Portal
                 </button>
               </Link>
             ) : userRole === 'student' ? (

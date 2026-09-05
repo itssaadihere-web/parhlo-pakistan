@@ -98,8 +98,8 @@ export default function AdminEditCoursePage() {
           level: data.level || 'Basic',
           category: data.category || '',
           instructor: data.instructor || '',
-          instructorIntro: data.instructorIntro || '',
-          instructorImage: data.instructorImage || '',
+          instructorIntro: data.instructorintro || data.instructorIntro || '',
+          instructorImage: data.instructorimage || data.instructorImage || '',
           thumbnail: data.thumbnail || '',
           price: data.price || '',
           discount: data.discount || '',
@@ -167,8 +167,8 @@ export default function AdminEditCoursePage() {
       data.forEach((course) => {
         const category = String(course.category || '').trim();
         const instructor = String(course.instructor || '').trim();
-        const intro = String(course.instructorIntro || '').trim();
-        const image = String(course.instructorImage || '').trim();
+        const intro = String(course.instructorintro || course.instructorIntro || '').trim();
+        const image = String(course.instructorimage || course.instructorImage || '').trim();
         if (category) categorySet.add(category);
         
         if (instructor && intro && !introMap[instructor.toLowerCase()]) {
@@ -437,8 +437,8 @@ export default function AdminEditCoursePage() {
           level: form.level,
           category: form.category,
           instructor: form.instructor,
-          instructorIntro: finalInstructorIntro,
-          instructorImage: finalInstructorImage,
+          instructorintro: finalInstructorIntro,
+          instructorimage: finalInstructorImage,
           thumbnail: form.thumbnail,
           price: form.price,
           discount: form.discount,

@@ -24,6 +24,7 @@ import {
 import { supabase } from '@/utils/supabase';
 import { getDeterministicRating } from '@/utils/courseHelpers';
 import { formatCurrency, parsePrice } from '@/utils/currencyHelpers';
+import { determineUserRole, getPortalPathForRole, getPortalLabelForRole } from '@/utils/authHelpers';
 
 const parsePriceValue = (value) => {
   return parsePrice(value);
@@ -85,15 +86,10 @@ export default function DynamicCourseDetail() {
       const storedRole = window.localStorage.getItem('parhloRole');
       setUserEmail(email || '');
       
-      if (isAdmin || storedRole === 'admin') {
-        setDashboardUrl('/admin');
-      } else if (storedRole === 'teacher') {
-        setDashboardUrl('/teacher');
-      } else {
-        setDashboardUrl('/dashboard');
-      }
+      const role = isAdmin ? 'admin' : (storedRole || (email ? determineUserRole(email) : 'student'));
+      setDashboardUrl(getPortalPathForRole(role));
       
-      if (isAdmin) {
+      if (isAdmin || role === 'admin') {
         setPaymentStatus('approved');
         return;
       }
@@ -247,60 +243,72 @@ export default function DynamicCourseDetail() {
 
     const fetchCourseDetail = async () => {
       setLoading(true);
-      const { data: adminCourse, error } = await supabase
-        .from('courses')
-        .select('*')
-        .eq('slug', slug)
-        .single();
+      try {
+        let adminCourse = null;
+        const res = await fetch(`/api/courses/${slug}`);
+        if (res.ok) {
+          adminCourse = await res.json();
+        } else {
+          const { data, error } = await supabase
+            .from('courses')
+            .select('*')
+            .eq('slug', slug)
+            .single();
+          if (!error && data) adminCourse = data;
+        }
 
-      if (error || !adminCourse) {
-        console.error('Error fetching course detail:', error);
+        if (!adminCourse) {
+          setCourseData(null);
+        } else {
+          const originalPrice = parsePriceValue(adminCourse.price);
+          const discountPercent = parseFloat(String(adminCourse.discount || '').replace(/[^0-9.]/g, '')) || 0;
+          const salePriceValue = discountPercent > 0 ? Math.round(originalPrice * (1 - discountPercent / 100)) : originalPrice;
+          const savings = discountPercent > 0 ? originalPrice - salePriceValue : 0;
+          const studentsCount = parseInt(adminCourse.students) || 0;
+
+          setCourseData({
+            title: adminCourse.name || 'New Course',
+            slug: adminCourse.slug,
+            category: adminCourse.category || 'New Course',
+            price: adminCourse.price || '0',
+            originalPrice: formatCurrency(originalPrice),
+            salePrice: formatCurrency(salePriceValue),
+            rawOriginalPrice: originalPrice,
+            rawSalePrice: salePriceValue,
+            discount: discountPercent > 0 ? discountPercent : 0,
+            savings: savings > 0 ? formatCurrency(savings) : null,
+            students: studentsCount >= 5 ? String(studentsCount) : null,
+            rating: getDeterministicRating(adminCourse.slug),
+            instructor: adminCourse.instructor || 'Admin Instructor',
+            instructorImage: adminCourse.instructorimage || adminCourse.instructorImage,
+            instructorIntro: adminCourse.instructorintro || adminCourse.instructorIntro || `Learn ${adminCourse.name} with practical video lectures and real examples.`,
+            level: adminCourse.level || 'All Levels',
+            duration: `${adminCourse.lectures?.length || 0} Lectures`,
+            description: adminCourse.description || `Learn ${adminCourse.name} with practical video lectures and real examples.`,
+            curriculum: adminCourse.lectures?.map((lecture, idx) => ({
+              id: idx + 1,
+              title: lecture.title || `Lecture ${idx + 1}`,
+              duration: (!lecture.duration || lecture.duration === 'Unknown' || lecture.duration === 'N/A') 
+                ? (lecture.type === 'quiz' ? 'Quiz' : '15 min') 
+                : lecture.duration,
+              isFree: lecture.type === 'demo',
+              videoId: lecture.videoId || '',
+              url: lecture.url || '',
+              type: lecture.type || 'lecture',
+              sub: lecture.type === 'quiz' 
+                ? 'Complete this quiz to test your knowledge.'
+                : lecture.type === 'demo'
+                  ? 'Free demo preview available for every student.'
+                  : 'Paid lecture content available after approval.',
+            })) || []
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching course detail:', err);
         setCourseData(null);
-      } else {
-        const originalPrice = parsePriceValue(adminCourse.price);
-        const discountPercent = parseFloat(String(adminCourse.discount || '').replace(/[^0-9.]/g, '')) || 0;
-        const salePriceValue = discountPercent > 0 ? Math.round(originalPrice * (1 - discountPercent / 100)) : originalPrice;
-        const savings = discountPercent > 0 ? originalPrice - salePriceValue : 0;
-        const studentsCount = parseInt(adminCourse.students) || 0;
-
-        setCourseData({
-          title: adminCourse.name || 'New Course',
-          slug: adminCourse.slug,
-          category: adminCourse.category || 'New Course',
-          price: adminCourse.price || '0',
-          originalPrice: formatCurrency(originalPrice),
-          salePrice: formatCurrency(salePriceValue),
-          rawOriginalPrice: originalPrice,
-          rawSalePrice: salePriceValue,
-          discount: discountPercent > 0 ? discountPercent : 0,
-          savings: savings > 0 ? formatCurrency(savings) : null,
-          students: studentsCount >= 5 ? String(studentsCount) : null,
-          rating: getDeterministicRating(adminCourse.slug),
-          instructor: adminCourse.instructor || 'Admin Instructor',
-          instructorImage: adminCourse.instructorImage,
-          instructorIntro: adminCourse.instructorIntro || `Learn ${adminCourse.name} with practical video lectures and real examples.`,
-          level: adminCourse.level || 'All Levels',
-          duration: `${adminCourse.lectures?.length || 0} Lectures`,
-          description: adminCourse.description || `Learn ${adminCourse.name} with practical video lectures and real examples.`,
-          curriculum: adminCourse.lectures?.map((lecture, idx) => ({
-            id: idx + 1,
-            title: lecture.title || `Lecture ${idx + 1}`,
-            duration: (!lecture.duration || lecture.duration === 'Unknown' || lecture.duration === 'N/A') 
-              ? (lecture.type === 'quiz' ? 'Quiz' : '15 min') 
-              : lecture.duration,
-            isFree: lecture.type === 'demo',
-            videoId: lecture.videoId || '',
-            url: lecture.url || '',
-            type: lecture.type || 'lecture',
-            sub: lecture.type === 'quiz' 
-              ? 'Complete this quiz to test your knowledge.'
-              : lecture.type === 'demo'
-                ? 'Free demo preview available for every student.'
-                : 'Paid lecture content available after approval.',
-          })) || []
-        });
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchCourseDetail();
@@ -870,7 +878,9 @@ export default function DynamicCourseDetail() {
           </Link>
           <div className="flex gap-4 items-center">
             {userEmail ? (
-              <Link href={dashboardUrl} className="text-sm font-bold text-gray-600 hover:text-green-600">Dashboard</Link>
+              <Link href={dashboardUrl} className="text-sm font-bold text-gray-600 hover:text-green-600">
+                {dashboardUrl === '/admin' ? 'Admin Panel' : dashboardUrl === '/teacher' ? 'Teacher Portal' : dashboardUrl === '/sales' ? 'Sales Portal' : 'Dashboard'}
+              </Link>
             ) : (
               <button onClick={() => setShowAuthModal(true)} className="text-sm font-bold text-gray-600 hover:text-green-600">Login</button>
             )}

@@ -19,6 +19,7 @@ import {
 import { supabase } from '@/utils/supabase';
 import InactivityTracker from '@/app/components/InactivityTracker';
 import { formatCurrency, parsePrice } from '@/utils/currencyHelpers';
+import { determineUserRole, getPortalPathForRole, syncUserSession, clearUserSession, ADMIN_EMAIL } from '@/utils/authHelpers';
 
 export default function StudentDashboard() {
   const router = useRouter();
@@ -45,30 +46,13 @@ export default function StudentDashboard() {
       try {
         setLoading(true);
         let email = (window.localStorage.getItem('currentUserEmail') || '').trim().toLowerCase();
-        const isAdmin = window.localStorage.getItem('parhloAdmin') === 'true';
 
-        if (isAdmin) {
-          router.replace('/admin');
-          return;
-        }
-
-        // Check Supabase session for Google Login
+        // 1. Check Supabase session (e.g. Google OAuth redirect)
         try {
           const { data: { session } } = await supabase.auth.getSession();
           if (session && session.user && session.user.email) {
             email = session.user.email.trim().toLowerCase();
             window.localStorage.setItem('currentUserEmail', email);
-            
-            if (email === "parhlo.pakistan.edu@gmail.com") {
-              window.localStorage.setItem('parhloAdmin', 'true');
-              router.replace('/admin');
-              return;
-            } else {
-              window.localStorage.setItem('parhloAdmin', 'false');
-            }
-
-            // Non-blocking lead status update
-            supabase.from('leads').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('email', email).then(() => {}).catch(() => {});
           }
         } catch (err) {
           console.error(err);
@@ -78,9 +62,30 @@ export default function StudentDashboard() {
           router.replace('/');
           return;
         }
-        
+
+        // 2. Fast check role
+        const preliminaryRole = determineUserRole(email);
+        if (preliminaryRole === 'admin') {
+          syncUserSession(email, 'admin');
+          router.replace('/admin');
+          return;
+        } else if (preliminaryRole === 'sales') {
+          syncUserSession(email, 'sales');
+          router.replace('/sales');
+          return;
+        } else if (preliminaryRole === 'teacher') {
+          syncUserSession(email, 'teacher');
+          router.replace('/teacher');
+          return;
+        }
+
+        // Keep as student
+        syncUserSession(email, 'student');
         setUserEmail(email);
         setStudentName(email.split('@')[0]);
+
+        // Background non-blocking lead status update
+        supabase.from('leads').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('email', email).then(() => {}).catch(() => {});
 
         // Parallel data fetch across all tables in a single round-trip!
         const [userProfileRes, purchasesRes, coursesRes, vProgressRes] = await Promise.all([
@@ -93,14 +98,19 @@ export default function StudentDashboard() {
         const userProfile = (userProfileRes?.data && userProfileRes.data.length > 0) ? userProfileRes.data[0] : null;
 
         if (userProfile) {
-          if (userProfile.role === 'teacher') {
-            window.localStorage.setItem('parhloRole', 'teacher');
+          const dbRole = determineUserRole(email, userProfile);
+          if (dbRole === 'teacher') {
+            syncUserSession(email, 'teacher');
             router.replace('/teacher');
             return;
           }
-          if (userProfile.role === 'admin' || email === "parhlo.pakistan.edu@gmail.com") {
-            window.localStorage.setItem('parhloRole', 'admin');
-            window.localStorage.setItem('parhloAdmin', 'true');
+          if (dbRole === 'sales') {
+            syncUserSession(email, 'sales');
+            router.replace('/sales');
+            return;
+          }
+          if (dbRole === 'admin') {
+            syncUserSession(email, 'admin');
             router.replace('/admin');
             return;
           }
@@ -384,12 +394,8 @@ export default function StudentDashboard() {
     } catch (e) {
       console.error(e);
     }
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('parhloAdmin');
-      window.localStorage.removeItem('parhloRole');
-      window.localStorage.removeItem('currentUserEmail');
-      window.location.href = '/';
-    }
+    clearUserSession();
+    window.location.href = '/';
   };
 
   if (loading) {

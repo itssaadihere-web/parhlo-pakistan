@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { X, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../../utils/supabase';
+import { determineUserRole, syncUserSession, ADMIN_EMAIL } from '../../utils/authHelpers';
 
 export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLoginSuccess }) {
   const [authMode, setAuthMode] = useState(initialMode);
@@ -24,85 +25,62 @@ export default function AuthModal({ onClose, isOpen, initialMode = 'login', onLo
     setIsSubmitting(true);
 
     try {
-      // Recognized team/staff emails
-      const isParhloStaff = lowerEmail.endsWith('@parhlopakistan.com.pk') || [
-        'faiz.ali@parhlopakistan.com.pk',
-        'nabiha.irfan@parhlopakistan.com.pk',
-        'sarina.saleem@parhlopakistan.com.pk',
-        'faria.ahmed@parhlopakistan.com.pk'
-      ].includes(lowerEmail);
-
-      const isTeacher = [
-        'farazsohail18@gmail.com',
-        'vaniya.ahmed.18@gmail.com',
-        'khadijaaqeelahmed20@gmail.com',
-        'muhammadzubair6879@gmail.com',
-        'syedshafaathussain@gmail.com',
-        'abdulrehman@parhlopakistan.com.pk'
-      ].includes(lowerEmail);
-
-      let finalRole = 'student';
-
-      if (lowerEmail === "parhlo.pakistan.edu@gmail.com") {
+      // 1. Instant check for Admin
+      if (lowerEmail === ADMIN_EMAIL.toLowerCase()) {
         const currentAdminPassword = (typeof window !== 'undefined' ? window.localStorage.getItem('parhloAdminPassword') : null) || "parhlo@2003";
         if (password !== currentAdminPassword) {
           alert("Incorrect password for Admin account.");
+          setIsSubmitting(false);
           return;
         }
-        finalRole = 'admin';
-      } else if (isParhloStaff) {
-        if (!password) {
-          alert("Please enter a password.");
+        syncUserSession(lowerEmail, 'admin');
+        onLoginSuccess && onLoginSuccess('admin');
+        onClose();
+        return;
+      }
+
+      // 2. Fetch user profile or determine preliminary role
+      let finalRole = determineUserRole(lowerEmail);
+
+      if (authMode === 'signup') {
+        const { error } = await supabase.auth.signUp({
+          email: lowerEmail,
+          password,
+          options: { data: { full_name: fullName, role: 'student' } }
+        });
+        if (error && !error.message.toLowerCase().includes('already registered')) {
+          alert("Error creating account: " + error.message);
+          setIsSubmitting(false);
           return;
         }
-        finalRole = 'sales';
-      } else if (isTeacher) {
-        if (!password) {
-          alert("Please enter a password.");
-          return;
-        }
-        finalRole = 'teacher';
+        supabase.from('users').upsert([{ email: lowerEmail, full_name: fullName, role: 'student' }], { onConflict: 'email' }).then(() => {}).catch(() => {});
+        finalRole = 'student';
       } else {
-        // Student login or sign-up
-        if (authMode === 'signup') {
-          const { error } = await supabase.auth.signUp({
-            email: lowerEmail,
-            password,
-            options: { data: { full_name: fullName, role: 'student' } }
-          });
-          if (error) {
-            alert("Error creating account: " + error.message);
-            return;
-          }
-          supabase.from('users').upsert([{ email: lowerEmail, full_name: fullName, role: 'student' }], { onConflict: 'email' }).then(() => {}).catch(() => {});
-        } else {
-          // Fast Supabase Auth attempt with 1.5s timeout race so users never hang
-          try {
-            const authPromise = supabase.auth.signInWithPassword({ email: lowerEmail, password });
-            const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 1500));
-            const res = await Promise.race([authPromise, timeoutPromise]);
-            if (res && res.error && !res.error.message.toLowerCase().includes('email not confirmed')) {
-              // Try fallback against users table if custom password
-              const { data: dbUsers } = await supabase.from('users').select('*').ilike('email', lowerEmail);
-              const dbUser = dbUsers && dbUsers.length > 0 ? dbUsers[0] : null;
-              if (dbUser && dbUser.password && dbUser.password !== password) {
+        // Fast sign in attempt
+        try {
+          const { error: authError } = await supabase.auth.signInWithPassword({ email: lowerEmail, password });
+          if (authError && !authError.message.toLowerCase().includes('email not confirmed')) {
+            // Check fallback in users table
+            const { data: dbUsers } = await supabase.from('users').select('*').ilike('email', lowerEmail).limit(1);
+            const dbUser = dbUsers && dbUsers.length > 0 ? dbUsers[0] : null;
+            if (dbUser) {
+              if (dbUser.password && dbUser.password !== password) {
                 alert("Incorrect password. Please check your credentials.");
+                setIsSubmitting(false);
                 return;
               }
+              finalRole = determineUserRole(lowerEmail, dbUser);
             }
-          } catch (e) {}
+          }
+        } catch (e) {
+          console.warn("Auth check fallback:", e);
         }
-        finalRole = 'student';
       }
 
-      // Save user session in localStorage immediately
-      const isAdmin = finalRole === 'admin';
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem('parhloAdmin', isAdmin ? 'true' : 'false');
-        window.localStorage.setItem('currentUserEmail', lowerEmail);
-        window.localStorage.setItem('parhloRole', finalRole);
-      }
+      // 3. Save session in localStorage immediately
+      syncUserSession(lowerEmail, finalRole);
 
+      // 4. Non-blocking background telemetry for students
       if (finalRole === 'student') {
         Promise.all([
           supabase.from('leads').update({ status: 'signed_in', updated_at: new Date().toISOString() }).ilike('email', lowerEmail),

@@ -19,6 +19,7 @@ import {
 import { supabase } from '@/utils/supabase';
 import { getDeterministicRating } from '@/utils/courseHelpers';
 import { formatCurrency, parsePrice } from '@/utils/currencyHelpers';
+import { determineUserRole, getPortalPathForRole } from '@/utils/authHelpers';
 
 export default function ParhloPakistan() {
   const router = useRouter();
@@ -33,26 +34,22 @@ export default function ParhloPakistan() {
 
   const handleLoginSuccess = (role) => {
     setShowAuthModal(false);
-    if (role === 'admin') {
-      router.push('/admin');
-    } else if (role === 'sales') {
-      router.push('/sales');
-    } else if (role === 'teacher') {
-      router.push('/teacher');
-    } else {
-      router.push('/dashboard');
-    }
+    router.push(getPortalPathForRole(role));
   };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const isAdmin = window.localStorage.getItem('parhloAdmin') === 'true';
-      const storedRole = window.localStorage.getItem('parhloRole');
       const email = window.localStorage.getItem('currentUserEmail');
-      if (isAdmin || storedRole === 'admin') setUserRole('admin');
-      else if (storedRole === 'sales') setUserRole('sales');
-      else if (storedRole === 'teacher') setUserRole('teacher');
-      else if (email) setUserRole('student');
+      const storedRole = window.localStorage.getItem('parhloRole');
+      const isAdmin = window.localStorage.getItem('parhloAdmin') === 'true';
+
+      if (isAdmin) {
+        setUserRole('admin');
+      } else if (storedRole) {
+        setUserRole(storedRole);
+      } else if (email) {
+        setUserRole(determineUserRole(email));
+      }
 
       fetchFeaturedCourses();
     }
@@ -60,40 +57,49 @@ export default function ParhloPakistan() {
 
   const fetchFeaturedCourses = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('courses')
-      .select('name, slug, thumbnail, price, discount, students, rating, tag')
-      .limit(3)
-      .order('created_at', { ascending: false });
+    try {
+      const res = await fetch('/api/courses?featured=true');
+      let data = null;
+      if (res.ok) {
+        data = await res.json();
+      } else {
+        const { data: sbData } = await supabase
+          .from('courses')
+          .select('name, slug, thumbnail, price, discount, students, rating, tag')
+          .limit(3)
+          .order('created_at', { ascending: false });
+        data = sbData;
+      }
 
-    if (error) {
-      console.error('Error fetching featured courses:', error);
-      // Fallback to empty if DB fails
-      setFeaturedCourses([]);
-    } else if (data && data.length > 0) {
-      const mappedCourses = data.map(course => {
-        const studentsCount = parseInt(course.students) || 0;
-        const originalPrice = parsePrice(course.price);
-        const discountPercent = parseFloat(String(course.discount || '').replace(/[^0-9.]/g, '')) || 0;
-        const salePrice = discountPercent > 0 ? Math.round(originalPrice * (1 - discountPercent / 100)) : originalPrice;
+      if (data && data.length > 0) {
+        const mappedCourses = data.map(course => {
+          const studentsCount = parseInt(course.students) || 0;
+          const originalPrice = parsePrice(course.price);
+          const discountPercent = parseFloat(String(course.discount || '').replace(/[^0-9.]/g, '')) || 0;
+          const salePrice = discountPercent > 0 ? Math.round(originalPrice * (1 - discountPercent / 100)) : originalPrice;
 
-        return {
-          title: course.name,
-          slug: course.slug,
-          thumbnail: course.thumbnail,
-          price: originalPrice,
-          salePrice: salePrice,
-          discount: discountPercent > 0 ? discountPercent : 0,
-          students: studentsCount >= 5 ? String(studentsCount) : null,
-          rating: getDeterministicRating(course.slug),
-          tag: course.tag || 'New'
-        };
-      });
-      setFeaturedCourses(mappedCourses);
-    } else {
+          return {
+            title: course.name,
+            slug: course.slug,
+            thumbnail: course.thumbnail,
+            price: originalPrice,
+            salePrice: salePrice,
+            discount: discountPercent > 0 ? discountPercent : 0,
+            students: studentsCount >= 5 ? String(studentsCount) : null,
+            rating: getDeterministicRating(course.slug),
+            tag: course.tag || 'New'
+          };
+        });
+        setFeaturedCourses(mappedCourses);
+      } else {
+        setFeaturedCourses([]);
+      }
+    } catch (err) {
+      console.error('Error fetching featured courses:', err);
       setFeaturedCourses([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -160,7 +166,13 @@ export default function ParhloPakistan() {
             ) : userRole === 'teacher' ? (
               <Link href="/teacher" className="mr-4">
                 <button className="bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-blue-700 transition-all shadow-lg">
-                  Teacher Panel
+                  Teacher Portal
+                </button>
+              </Link>
+            ) : userRole === 'sales' ? (
+              <Link href="/sales" className="mr-4">
+                <button className="bg-purple-600 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-purple-700 transition-all shadow-lg">
+                  Sales Portal
                 </button>
               </Link>
             ) : userRole === 'student' ? (
@@ -195,7 +207,13 @@ export default function ParhloPakistan() {
               ) : userRole === 'teacher' ? (
                 <Link href="/teacher">
                   <button className="w-full bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all">
-                    Teacher Panel
+                    Teacher Portal
+                  </button>
+                </Link>
+              ) : userRole === 'sales' ? (
+                <Link href="/sales">
+                  <button className="w-full bg-purple-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-purple-700 transition-all">
+                    Sales Portal
                   </button>
                 </Link>
               ) : userRole === 'student' ? (

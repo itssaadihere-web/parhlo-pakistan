@@ -37,13 +37,7 @@ import InactivityTracker from '@/app/components/InactivityTracker';
 import { formatCurrency, parsePrice } from '@/utils/currencyHelpers';
 import LeadKanbanBoard from '@/app/components/crm/LeadKanbanBoard';
 import LeadDetailModal from '@/app/components/crm/LeadDetailModal';
-
-const SALES_EMAILS = [
-  'faiz.ali@parhlopakistan.com.pk',
-  'nabiha.irfan@parhlopakistan.com.pk',
-  'sarina.saleem@parhlopakistan.com.pk',
-  'faria.ahmed@parhlopakistan.com.pk'
-];
+import { determineUserRole, getPortalPathForRole, ADMIN_EMAIL, clearUserSession } from '@/utils/authHelpers';
 
 export default function SalesDashboard() {
   const router = useRouter();
@@ -85,19 +79,25 @@ export default function SalesDashboard() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const email = (window.localStorage.getItem('currentUserEmail') || '').toLowerCase().trim();
-      const role = window.localStorage.getItem('parhloRole');
-      const isAdmin = window.localStorage.getItem('parhloAdmin') === 'true' || role === 'admin';
-      const isSales = SALES_EMAILS.includes(email) || role === 'sales';
+      if (!email) {
+        router.replace('/');
+        return;
+      }
 
-      if (isAdmin) {
-        alert("Admin Access Notice: Admins manage Sales, CRM, and Performance Reports directly within the Admin Panel (/admin). Redirecting to Admin Panel...");
+      const role = determineUserRole(email);
+
+      if (role === 'admin') {
         router.replace('/admin');
         return;
       }
 
-      if (!isSales) {
-        alert("Access Denied: Sales Representative Portal is restricted exclusively to authorized Sales Representatives.");
-        router.replace('/');
+      if (role === 'teacher') {
+        router.replace('/teacher');
+        return;
+      }
+
+      if (role !== 'sales') {
+        router.replace('/dashboard');
         return;
       }
 
@@ -375,9 +375,7 @@ export default function SalesDashboard() {
     try {
       await supabase.auth.signOut();
     } catch (e) {}
-    window.localStorage.removeItem('parhloAdmin');
-    window.localStorage.removeItem('parhloRole');
-    window.localStorage.removeItem('currentUserEmail');
+    clearUserSession();
     router.push('/');
   };
 

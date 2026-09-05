@@ -140,8 +140,8 @@ export default function AdminAddCoursePage() {
       data.forEach((course) => {
         const category = String(course.category || '').trim();
         const instructor = String(course.instructor || '').trim();
-        const intro = String(course.instructorIntro || '').trim();
-        const image = String(course.instructorImage || '').trim();
+        const intro = String(course.instructorintro || course.instructorIntro || '').trim();
+        const image = String(course.instructorimage || course.instructorImage || '').trim();
         if (category) categorySet.add(category);
         
         if (instructor && intro && !introMap[instructor.toLowerCase()]) {
@@ -434,8 +434,8 @@ export default function AdminAddCoursePage() {
             level: form.level,
             category: form.category,
             instructor: form.instructor,
-            instructorIntro: finalInstructorIntro,
-            instructorImage: finalInstructorImage,
+            instructorintro: finalInstructorIntro,
+            instructorimage: finalInstructorImage,
             thumbnail: form.thumbnail,
             price: form.price,
             discount: form.discount,

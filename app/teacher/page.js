@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/utils/supabase';
 import { parsePrice } from '@/utils/currencyHelpers';
+import { determineUserRole, getPortalPathForRole, ADMIN_EMAIL, clearUserSession } from '@/utils/authHelpers';
 
 export default function TeacherDashboard() {
   const router = useRouter();
@@ -41,16 +42,33 @@ export default function TeacherDashboard() {
   const [passwordMsg, setPasswordMsg] = useState('');
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const role = window.localStorage.getItem('parhloRole');
-    const email = window.localStorage.getItem('currentUserEmail');
-    
-    if (role !== 'teacher' || !email) {
-      router.replace('/');
-      return;
+    if (typeof window !== 'undefined') {
+      const email = (window.localStorage.getItem('currentUserEmail') || '').toLowerCase().trim();
+      if (!email) {
+        router.replace('/');
+        return;
+      }
+
+      const role = determineUserRole(email);
+
+      if (role === 'admin') {
+        router.replace('/admin');
+        return;
+      }
+
+      if (role === 'sales') {
+        router.replace('/sales');
+        return;
+      }
+
+      if (role !== 'teacher') {
+        router.replace('/dashboard');
+        return;
+      }
+
+      setIsTeacher(true);
+      fetchTeacherData(email);
     }
-    setIsTeacher(true);
-    fetchTeacherData(email);
   }, []);
 
   const fetchTeacherData = async (email) => {
@@ -72,10 +90,9 @@ export default function TeacherDashboard() {
     setIntro(user.intro || '');
     setImage(user.image || '');
 
-    const { data: myCourses, error: coursesError } = await supabase
+    const { data: allCourses, error: coursesError } = await supabase
       .from('courses')
-      .select('*')
-      .ilike('instructor', user.full_name);
+      .select('*');
 
     if (coursesError) {
       console.error('Error fetching courses:', coursesError);
@@ -83,11 +100,30 @@ export default function TeacherDashboard() {
       return;
     }
 
-    const courseSlugs = (myCourses || []).map(c => c.slug);
+    const cleanName = (user.full_name || '').toLowerCase().replace(/dr\.|\s+/g, ' ').trim();
+    const cleanEmail = email.toLowerCase().trim();
+
+    const myCourses = (allCourses || []).filter(c => {
+      const inst = (c.instructor || '').toLowerCase().replace(/dr\.|\s+/g, ' ').trim();
+      if (!inst) return false;
+      return (
+        inst === cleanName ||
+        inst.includes(cleanName) ||
+        cleanName.includes(inst) ||
+        (cleanEmail.includes('shafaat') && inst.includes('shafaat')) ||
+        (cleanEmail.includes('abdulrehman') && inst.includes('abdul rehman')) ||
+        (cleanEmail.includes('faraz') && inst.includes('faraz')) ||
+        (cleanEmail.includes('vaniya') && inst.includes('vaniya')) ||
+        (cleanEmail.includes('khadija') && inst.includes('khadija')) ||
+        (cleanEmail.includes('zubair') && inst.includes('zubair'))
+      );
+    });
+
+    const courseSlugs = myCourses.map(c => c.slug);
     
     let totalRev = 0;
     let studentsCount = 0;
-    const enrichedCourses = [...(myCourses || [])];
+    const enrichedCourses = [...myCourses];
 
     if (courseSlugs.length > 0) {
       const { data: purchases, error: purchasesError } = await supabase
@@ -103,7 +139,7 @@ export default function TeacherDashboard() {
           let courseCollectedRev = 0;
           coursePurchases.forEach(p => {
             if (p.payment_plan === 'free_trial' && (!p.amount_paid || p.amount_paid === 0)) {
-              courseCollectedRev += 0; // 0 PKR collected during 1-Month Free Access period
+              courseCollectedRev += 0;
             } else if (p.amount_paid !== undefined && p.amount_paid !== null && p.amount_paid !== '') {
               courseCollectedRev += Number(p.amount_paid);
             } else {
@@ -136,12 +172,8 @@ export default function TeacherDashboard() {
     } catch (e) {
       console.error(e);
     }
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('parhloAdmin');
-      window.localStorage.removeItem('parhloRole');
-      window.localStorage.removeItem('currentUserEmail');
-      window.location.href = '/';
-    }
+    clearUserSession();
+    window.location.href = '/';
   };
 
   const compressImage = (file, callback) => {
@@ -199,8 +231,8 @@ export default function TeacherDashboard() {
       
       // Sync courses with new intro and image
       const { error: courseUpdateError } = await supabase.from('courses').update({
-        instructorIntro: intro,
-        instructorImage: image
+        instructorintro: intro,
+        instructorimage: image
       }).ilike('instructor', teacherProfile.full_name);
       
       if (courseUpdateError) {
