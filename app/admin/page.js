@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -37,7 +37,8 @@ import {
   Sparkles,
   AlertCircle,
   Filter,
-  Check
+  Check,
+  ArrowUpDown
 } from 'lucide-react';
 
 import { supabase } from '@/utils/supabase';
@@ -77,9 +78,16 @@ export default function AdminDashboard() {
   const [crmLeads, setCrmLeads] = useState([]);
   const [crmSearch, setCrmSearch] = useState('');
   const [crmRepFilter, setCrmRepFilter] = useState('all');
+  const [crmSort, setCrmSort] = useState('newest');
   const [salesReps, setSalesReps] = useState([]);
   const [selectedLead, setSelectedLead] = useState(null);
   const [allActivities, setAllActivities] = useState([]);
+
+  // Sorting States
+  const [paymentSort, setPaymentSort] = useState('newest');
+  const [offerSort, setOfferSort] = useState('newest');
+  const [studentSort, setStudentSort] = useState('name_asc');
+  const [courseSort, setCourseSort] = useState('name_asc');
 
   // Sales Rep Management State
   const [newSalesRep, setNewSalesRep] = useState({ name: '', email: '', password: '' });
@@ -623,30 +631,44 @@ export default function AdminDashboard() {
     }, 1200);
   };
 
-  const filteredOffers = (salesOffers || []).filter(offer => {
-    if (!offer) return false;
-    const sQuery = (offerSearch || '').toLowerCase().trim();
-    const matchesSearch =
-      !sQuery ||
-      String(offer.student_email || '').toLowerCase().includes(sQuery) ||
-      String(offer.course_slug || '').toLowerCase().includes(sQuery) ||
-      String(offer.sales_email || '').toLowerCase().includes(sQuery);
+  const filteredOffers = useMemo(() => {
+    let list = (salesOffers || []).filter(offer => {
+      if (!offer) return false;
+      const sQuery = (offerSearch || '').toLowerCase().trim();
+      const matchesSearch =
+        !sQuery ||
+        String(offer.student_email || '').toLowerCase().includes(sQuery) ||
+        String(offer.course_slug || '').toLowerCase().includes(sQuery) ||
+        String(offer.sales_email || '').toLowerCase().includes(sQuery);
 
-    const matchesRep =
-      offerRepFilter === 'all' ||
-      (offerRepFilter === 'admin'
-        ? String(offer.sales_email || '').toLowerCase().includes('admin')
-        : String(offer.sales_email || '').toLowerCase() === (offerRepFilter || '').toLowerCase());
+      const matchesRep =
+        offerRepFilter === 'all' ||
+        (offerRepFilter === 'admin'
+          ? String(offer.sales_email || '').toLowerCase().includes('admin')
+          : String(offer.sales_email || '').toLowerCase() === (offerRepFilter || '').toLowerCase());
 
-    const matchesStatus =
-      offerStatusFilter === 'all' ||
-      (offerStatusFilter === 'active' ? (offer.status === 'active' || !offer.status) : offer.status === offerStatusFilter);
+      const matchesStatus =
+        offerStatusFilter === 'all' ||
+        (offerStatusFilter === 'active' ? (offer.status === 'active' || !offer.status) : offer.status === offerStatusFilter);
 
-    const matchesType =
-      offerTypeFilter === 'all' || offer.offer_type === offerTypeFilter;
+      const matchesType =
+        offerTypeFilter === 'all' || offer.offer_type === offerTypeFilter;
 
-    return matchesSearch && matchesRep && matchesStatus && matchesType;
-  });
+      return matchesSearch && matchesRep && matchesStatus && matchesType;
+    });
+
+    if (offerSort === 'newest') {
+      list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    } else if (offerSort === 'oldest') {
+      list.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+    } else if (offerSort === 'discount_high') {
+      list.sort((a, b) => (Number(b.discount_percent) || 0) - (Number(a.discount_percent) || 0));
+    } else if (offerSort === 'student_asc') {
+      list.sort((a, b) => String(a.student_email || '').localeCompare(String(b.student_email || '')));
+    }
+
+    return list;
+  }, [salesOffers, offerSearch, offerRepFilter, offerStatusFilter, offerTypeFilter, offerSort]);
 
   const handleBulkAssignUnassigned = async () => {
     const unassignedLeads = crmLeads.filter(l => !l.assigned_to);
@@ -1245,6 +1267,20 @@ export default function AdminDashboard() {
                       <option key={i} value={r.email}>{r.full_name || r.email}</option>
                     ))}
                   </select>
+
+                  <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-slate-900 font-medium">
+                    <ArrowUpDown size={14} className="text-gray-400 mr-2 shrink-0" />
+                    <select
+                      value={crmSort}
+                      onChange={(e) => setCrmSort(e.target.value)}
+                      className="bg-transparent text-slate-900 font-bold text-xs focus:outline-none cursor-pointer"
+                    >
+                      <option value="newest">Newest Added</option>
+                      <option value="oldest">Oldest Added</option>
+                      <option value="name_asc">Name (A-Z)</option>
+                      <option value="stage">Stage / Status</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -1262,8 +1298,9 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 text-slate-900 font-medium">
-                    {crmLeads
+                    {(crmLeads || [])
                       .filter(l => {
+                        if (!l) return false;
                         const sQuery = (crmSearch || '').toLowerCase().trim();
                         const matchSearch = !sQuery ||
                           String(l.name || '').toLowerCase().includes(sQuery) ||
@@ -1272,8 +1309,15 @@ export default function AdminDashboard() {
                         if (!matchSearch) return false;
 
                         if (crmRepFilter === 'unassigned') return !l.assigned_to;
-                        if (crmRepFilter !== 'all') return l.assigned_to?.toLowerCase() === crmRepFilter.toLowerCase();
+                        if (crmRepFilter !== 'all') return String(l.assigned_to || '').toLowerCase() === String(crmRepFilter || '').toLowerCase();
                         return true;
+                      })
+                      .sort((a, b) => {
+                        if (crmSort === 'newest') return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+                        if (crmSort === 'oldest') return new Date(a.created_at || 0) - new Date(b.created_at || 0);
+                        if (crmSort === 'name_asc') return String(a.name || '').localeCompare(String(b.name || ''));
+                        if (crmSort === 'stage') return String(a.status || '').localeCompare(String(b.status || ''));
+                        return 0;
                       })
                       .map((lead, idx) => (
                         <tr key={lead.id || `admin_lead_${idx}`} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedLead(lead)}>
@@ -1704,6 +1748,21 @@ export default function AdminDashboard() {
                     <option value="free_month_trial">1-Month Free Access</option>
                     <option value="discounted_installment">Discounted Installment</option>
                   </select>
+
+                  {/* Sort Filter */}
+                  <div className="flex items-center px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 text-xs font-bold text-slate-700">
+                    <ArrowUpDown size={14} className="text-gray-400 mr-2 shrink-0" />
+                    <select
+                      value={offerSort}
+                      onChange={(e) => setOfferSort(e.target.value)}
+                      className="bg-transparent text-slate-900 font-bold text-xs focus:outline-none cursor-pointer"
+                    >
+                      <option value="newest">Newest Created</option>
+                      <option value="oldest">Oldest Created</option>
+                      <option value="discount_high">Highest Discount</option>
+                      <option value="student_asc">Student Email (A-Z)</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -2060,12 +2119,27 @@ export default function AdminDashboard() {
                 <h1 className="text-3xl font-black text-slate-900">Course Manager</h1>
                 <p className="text-gray-500 mt-2">Manage all courses listed on the site, add new entries, or remove outdated ones.</p>
               </div>
-              <Link
-                href="/admin/add-course"
-                className="inline-flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-full font-black hover:bg-green-700 transition-all"
-              >
-                <Plus size={16} /> Add New Course
-              </Link>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center bg-white border border-gray-200 rounded-full px-4 py-2.5 text-xs font-medium shadow-sm">
+                  <ArrowUpDown size={14} className="text-gray-400 mr-2 shrink-0" />
+                  <select
+                    value={courseSort}
+                    onChange={(e) => setCourseSort(e.target.value)}
+                    className="bg-transparent text-slate-900 font-bold text-xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="name_asc">Course Name (A-Z)</option>
+                    <option value="price_high">Price: High to Low</option>
+                    <option value="price_low">Price: Low to High</option>
+                    <option value="instructor_asc">Instructor (A-Z)</option>
+                  </select>
+                </div>
+                <Link
+                  href="/admin/add-course"
+                  className="inline-flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-full font-black hover:bg-green-700 transition-all shadow-md shrink-0"
+                >
+                  <Plus size={16} /> Add New Course
+                </Link>
+              </div>
             </div>
 
             <div className="overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-sm">
@@ -2077,7 +2151,15 @@ export default function AdminDashboard() {
                 <div className="col-span-1">Level</div>
                 <div className="col-span-2 text-right">Action</div>
               </div>
-              {adminCourses.map((course) => (
+              {[...adminCourses]
+                .sort((a, b) => {
+                  if (courseSort === 'name_asc') return String(a.name || '').localeCompare(String(b.name || ''));
+                  if (courseSort === 'instructor_asc') return String(a.instructor || '').localeCompare(String(b.instructor || ''));
+                  if (courseSort === 'price_high') return (parsePrice(b.price) || 0) - (parsePrice(a.price) || 0);
+                  if (courseSort === 'price_low') return (parsePrice(a.price) || 0) - (parsePrice(b.price) || 0);
+                  return 0;
+                })
+                .map((course) => (
                 <div key={course.slug} className="grid grid-cols-12 gap-4 px-6 py-5 border-t border-gray-100 items-center hover:bg-gray-50 transition-colors">
                   <div className="col-span-3 font-bold text-slate-900">{course.name}</div>
                   <div className="col-span-2 text-gray-500">{course.category}</div>
@@ -2195,9 +2277,35 @@ export default function AdminDashboard() {
 
             {approvedPayments.length > 0 && (
               <div className="mt-16">
-                <h2 className="text-xl font-black text-slate-900 mb-6">Recently Approved</h2>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                  <h2 className="text-xl font-black text-slate-900">Recently Approved Payments</h2>
+                  <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-medium">
+                    <ArrowUpDown size={14} className="text-gray-400 mr-2 shrink-0" />
+                    <select
+                      value={paymentSort}
+                      onChange={(e) => setPaymentSort(e.target.value)}
+                      className="bg-transparent text-slate-900 font-bold text-xs focus:outline-none cursor-pointer"
+                    >
+                      <option value="newest">Newest Date</option>
+                      <option value="oldest">Oldest Date</option>
+                      <option value="amount_high">Amount: High to Low</option>
+                      <option value="amount_low">Amount: Low to High</option>
+                      <option value="course_asc">Course Name (A-Z)</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="bg-white rounded-[2rem] border border-gray-100 p-6">
-                  {approvedPayments.map(payment => (
+                  {[...approvedPayments]
+                    .sort((a, b) => {
+                      if (paymentSort === 'newest') return new Date(b.created_at || b.date || 0) - new Date(a.created_at || a.date || 0);
+                      if (paymentSort === 'oldest') return new Date(a.created_at || a.date || 0) - new Date(b.created_at || b.date || 0);
+                      if (paymentSort === 'amount_high') return (Number(b.amountPaid) || 0) - (Number(a.amountPaid) || 0);
+                      if (paymentSort === 'amount_low') return (Number(a.amountPaid) || 0) - (Number(b.amountPaid) || 0);
+                      if (paymentSort === 'course_asc') return String(a.courseName || '').localeCompare(String(b.courseName || ''));
+                      return 0;
+                    })
+                    .map(payment => (
                     <div key={payment.id} className="flex justify-between items-center py-4 border-b border-gray-50 last:border-0">
                       <div>
                         <p className="font-bold text-gray-900">{payment.courseName}</p>

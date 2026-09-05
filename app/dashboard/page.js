@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
@@ -13,6 +13,8 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  Search,
+  ArrowUpDown,
   Menu,
   X
 } from 'lucide-react';
@@ -38,6 +40,29 @@ export default function StudentDashboard() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
+  const [courseSearch, setCourseSearch] = useState('');
+  const [courseSort, setCourseSort] = useState('default');
+
+  const filteredAndSortedEnrolledCourses = useMemo(() => {
+    let list = [...(enrolledCourses || [])];
+    const q = (courseSearch || '').toLowerCase().trim();
+    if (q) {
+      list = list.filter(c =>
+        String(c.title || '').toLowerCase().includes(q) ||
+        String(c.category || '').toLowerCase().includes(q)
+      );
+    }
+
+    if (courseSort === 'progress_high') {
+      list.sort((a, b) => (Number(b.progress) || 0) - (Number(a.progress) || 0));
+    } else if (courseSort === 'progress_low') {
+      list.sort((a, b) => (Number(a.progress) || 0) - (Number(b.progress) || 0));
+    } else if (courseSort === 'name_asc') {
+      list.sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
+    }
+
+    return list;
+  }, [enrolledCourses, courseSearch, courseSort]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -679,14 +704,45 @@ export default function StudentDashboard() {
 
         {activeTab === 'courses' && (
           <>
-            <header className="mb-10">
-              <h1 className="text-3xl font-black text-slate-900 mb-2">My Subjects</h1>
-              <p className="text-gray-500 font-medium">All the subjects you are currently enrolled in with full access.</p>
-            </header>
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+              <div>
+                <h1 className="text-3xl font-black text-slate-900 mb-2">My Subjects</h1>
+                <p className="text-gray-500 font-medium text-sm">All the subjects you are currently enrolled in with full access.</p>
+              </div>
 
-            {enrolledCourses.length > 0 ? (
+              {enrolledCourses.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                  <div className="relative">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    <input
+                      type="text"
+                      placeholder="Search enrolled subjects..."
+                      value={courseSearch}
+                      onChange={(e) => setCourseSearch(e.target.value)}
+                      className="w-full sm:w-56 bg-white border border-gray-200 rounded-xl pl-10 pr-3 py-2 text-xs font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-600 shadow-sm"
+                    />
+                  </div>
+
+                  <div className="relative flex items-center bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-medium shadow-sm">
+                    <ArrowUpDown size={14} className="text-gray-400 mr-2 shrink-0" />
+                    <select
+                      value={courseSort}
+                      onChange={(e) => setCourseSort(e.target.value)}
+                      className="bg-transparent text-gray-800 font-bold text-xs focus:outline-none cursor-pointer pr-2"
+                    >
+                      <option value="default">Default Order</option>
+                      <option value="progress_high">Progress: High to Low</option>
+                      <option value="progress_low">Progress: Low to High</option>
+                      <option value="name_asc">Subject Name (A-Z)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {filteredAndSortedEnrolledCourses.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {enrolledCourses.map((course, i) => (
+                {filteredAndSortedEnrolledCourses.map((course, i) => (
                   <div key={i} className="bg-white rounded-[2.5rem] border border-gray-100 overflow-hidden group hover:shadow-xl transition-all duration-300">
                     <div className={`h-48 bg-gradient-to-br ${course.imageClass || 'from-slate-900 to-green-600'} flex items-center justify-center relative overflow-hidden`}>
                        {course.thumbnail && (

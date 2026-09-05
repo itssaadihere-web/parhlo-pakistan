@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import AuthModal from '@/app/components/AuthModal';
@@ -9,6 +9,7 @@ import {
   Star, 
   Search,
   Filter,
+  ArrowUpDown,
   ChevronRight,
   Menu,
   X
@@ -32,6 +33,32 @@ export default function AllCourses() {
 
   const [courses, setCourses] = useState([]);
   const [coursesError, setCoursesError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('default');
+
+  const filteredAndSortedCourses = useMemo(() => {
+    let result = [...(courses || [])];
+    const q = (searchTerm || '').toLowerCase().trim();
+    if (q) {
+      result = result.filter(c =>
+        String(c.title || '').toLowerCase().includes(q) ||
+        String(c.description || '').toLowerCase().includes(q) ||
+        String(c.tag || '').toLowerCase().includes(q)
+      );
+    }
+
+    if (sortBy === 'price_low') {
+      result.sort((a, b) => (Number(a.salePrice || a.price) || 0) - (Number(b.salePrice || b.price) || 0));
+    } else if (sortBy === 'price_high') {
+      result.sort((a, b) => (Number(b.salePrice || b.price) || 0) - (Number(a.salePrice || a.price) || 0));
+    } else if (sortBy === 'name_asc') {
+      result.sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
+    } else if (sortBy === 'discount_high') {
+      result.sort((a, b) => (Number(b.discount) || 0) - (Number(a.discount) || 0));
+    }
+
+    return result;
+  }, [courses, searchTerm, sortBy]);
 
   const parseStudentCount = (value) => {
     if (value === undefined || value === null) return 0;
@@ -259,9 +286,40 @@ export default function AllCourses() {
       )}
 
       <main className="max-w-7xl mx-auto px-8 py-16">
-        <div className="mb-16">
-          <h2 className="text-5xl font-black tracking-tight text-gray-900 mb-4">Available Subjects</h2>
-          <p className="text-gray-500 font-medium max-w-xl">Explore our Sindh Board courses designed for clear concept building, strong exam preparation, and better academic performance.</p>
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
+          <div>
+            <h2 className="text-5xl font-black tracking-tight text-gray-900 mb-4">Available Subjects</h2>
+            <p className="text-gray-500 font-medium max-w-xl">Explore our Sindh Board courses designed for clear concept building, strong exam preparation, and better academic performance.</p>
+          </div>
+
+          {/* Search & Sort Controls */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="text"
+                placeholder="Search subject or topic..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full sm:w-64 bg-white border border-gray-200 rounded-full pl-11 pr-4 py-2.5 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#064e3b] shadow-sm"
+              />
+            </div>
+
+            <div className="relative flex items-center bg-white border border-gray-200 rounded-full px-4 py-2 text-sm font-medium shadow-sm">
+              <ArrowUpDown size={16} className="text-gray-400 mr-2 shrink-0" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="bg-transparent text-gray-800 font-bold text-xs focus:outline-none cursor-pointer pr-2"
+              >
+                <option value="default">Default Sorting</option>
+                <option value="price_low">Price: Low to High</option>
+                <option value="price_high">Price: High to Low</option>
+                <option value="name_asc">Subject Name (A-Z)</option>
+                <option value="discount_high">Highest Discount</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 mb-20">
@@ -289,7 +347,7 @@ export default function AllCourses() {
                 </div>
               </div>
             ))
-          ) : courses.length > 0 ? courses.map((course, i) => {
+          ) : filteredAndSortedCourses.length > 0 ? filteredAndSortedCourses.map((course, i) => {
             const meta = [];
             if (course.rating) meta.push(course.rating);
             if (course.students) meta.push(`${course.students} Students`);
