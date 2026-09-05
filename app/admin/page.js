@@ -927,10 +927,10 @@ export default function AdminDashboard() {
   const approvedPayments = payments.filter(p => p.status === 'approved' && isRealPayment(p));
 
   const getEnrollments = () => {
-    let studentEmails = [...new Set(payments.filter(p => ['approved', 'suspended'].includes(p.status)).map(p => p.userEmail))];
-    studentEmails = studentEmails.filter(email => email !== 'parhlo.pakistan.edu@gmail.com');
+    let studentEmails = [...new Set((payments || []).filter(p => p && ['approved', 'suspended'].includes(p.status)).map(p => p.userEmail).filter(Boolean))];
+    studentEmails = studentEmails.filter(email => String(email || '').toLowerCase() !== 'parhlo.pakistan.edu@gmail.com');
     return studentEmails.map(email => {
-      const studentPayments = payments.filter(p => p.userEmail === email);
+      const studentPayments = (payments || []).filter(p => p && p.userEmail === email);
       return {
         email,
         activeCourses: studentPayments.filter(p => ['approved', 'suspended'].includes(p.status)),
@@ -1493,20 +1493,21 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 text-slate-900 font-medium">
-                    {salesReps.map((rep, idx) => {
-                      const repLeads = crmLeads.filter(l => l.assigned_to?.toLowerCase() === rep.email.toLowerCase());
+                    {(salesReps || []).map((rep, idx) => {
+                      const repEmail = String(rep?.email || '').toLowerCase().trim();
+                      const repLeads = (crmLeads || []).filter(l => String(l.assigned_to || '').toLowerCase().trim() === repEmail);
                       const contactedCount = repLeads.filter(l => l.status === 'contacted').length;
                       const interestedCount = repLeads.filter(l => l.status === 'interested').length;
                       const demoCount = repLeads.filter(l => l.status === 'demo_scheduled').length;
                       const convertedCount = repLeads.filter(l => l.status === 'converted').length;
-                      const repActs = allActivities.filter(a => a.sales_email?.toLowerCase() === rep.email.toLowerCase());
+                      const repActs = (allActivities || []).filter(a => String(a.sales_email || '').toLowerCase().trim() === repEmail);
                       const rate = repLeads.length > 0 ? ((convertedCount / repLeads.length) * 100).toFixed(1) : '0.0';
 
                       return (
-                        <tr key={idx} className="hover:bg-gray-50">
+                        <tr key={rep.id || `rep_perf_${idx}`} className="hover:bg-gray-50">
                           <td className="p-4 font-bold">
-                            <span className="block text-slate-900 text-sm">{rep.full_name || rep.email.split('@')[0]}</span>
-                            <span className="text-[11px] text-gray-400 font-mono">{rep.email}</span>
+                            <span className="block text-slate-900 text-sm">{rep.full_name || repEmail.split('@')[0] || 'Sales Rep'}</span>
+                            <span className="text-[11px] text-gray-400 font-mono">{repEmail}</span>
                           </td>
                           <td className="p-4 font-bold font-mono text-slate-900">{repLeads.length}</td>
                           <td className="p-4 text-amber-700 font-bold">{contactedCount}</td>
@@ -1721,38 +1722,40 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 font-medium">
-                    {filteredOffers.map((offer) => {
-                      const matchedCourse = adminCourses.find(c => c.slug === offer.course_slug);
-                      const courseTitle = matchedCourse ? matchedCourse.name : offer.course_slug;
+                    {(filteredOffers || []).map((offer) => {
+                      if (!offer) return null;
+                      const matchedCourse = (adminCourses || []).find(c => c && c.slug === offer.course_slug);
+                      const courseTitle = matchedCourse ? matchedCourse.name : (offer.course_slug || 'Course');
                       const rawPrice = matchedCourse ? parsePrice(matchedCourse.price) : 0;
                       
-                      const emailLower = (offer.sales_email || '').toLowerCase();
+                      const emailLower = String(offer.sales_email || '').toLowerCase();
                       const issuerName = emailLower.includes('faiz') ? 'Faiz Ali' :
                         emailLower.includes('nabiha') ? 'Nabiha Irfan' :
                         emailLower.includes('sarina') ? 'Sarina Saleem' :
                         emailLower.includes('faria') ? 'Faria Ahmed' :
-                        emailLower.includes('admin') ? 'Admin Portal' : offer.sales_email;
+                        emailLower.includes('admin') ? 'Admin Portal' : (offer.sales_email || 'Staff');
 
                       const createdDate = new Date(offer.created_at || Date.now());
                       const dateFormatted = createdDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
                       const timeFormatted = createdDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                      const sEmail = String(offer.student_email || '').trim();
 
                       return (
-                        <tr key={offer.id} className="hover:bg-gray-50/80 transition-colors">
+                        <tr key={offer.id || `offer_${Math.random()}`} className="hover:bg-gray-50/80 transition-colors">
                           {/* WHOM */}
                           <td className="py-4 px-4">
                             <div className="flex items-center gap-2.5">
                               <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 font-black text-xs flex items-center justify-center shrink-0">
-                                {offer.student_email.charAt(0).toUpperCase()}
+                                {sEmail ? sEmail.charAt(0).toUpperCase() : '?'}
                               </div>
                               <div>
-                                <span className="font-bold text-slate-900 block font-mono text-xs">{offer.student_email}</span>
+                                <span className="font-bold text-slate-900 block font-mono text-xs">{sEmail || '—'}</span>
                                 {(() => {
-                                  const isRegistered = students.some(s => s.email?.toLowerCase() === offer.student_email?.toLowerCase());
-                                  const hasPaid = payments.some(p => 
-                                    p.userEmail?.toLowerCase() === offer.student_email?.toLowerCase() && 
-                                    (p.courseSlug || '').trim().toLowerCase() === (offer.course_slug || '').trim().toLowerCase() && 
-                                    (p.amount_paid > 0 || (p.status === 'approved' && p.paymentPlan !== 'free_trial'))
+                                  const isRegistered = (students || []).some(s => String(s?.email || '').toLowerCase() === sEmail.toLowerCase());
+                                  const hasPaid = (payments || []).some(p => 
+                                    String(p?.userEmail || '').toLowerCase() === sEmail.toLowerCase() && 
+                                    String(p?.courseSlug || '').trim().toLowerCase() === String(offer.course_slug || '').trim().toLowerCase() && 
+                                    (Number(p?.amountPaid) > 0 || (p?.status === 'approved' && p?.paymentPlan !== 'free_trial'))
                                   );
 
                                   if (isRegistered && hasPaid) {

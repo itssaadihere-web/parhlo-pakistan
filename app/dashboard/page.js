@@ -291,8 +291,9 @@ export default function StudentDashboard() {
           const totalLectures = course.lectures?.length || 1;
 
           Object.keys(progressData).forEach(lecId => {
-             watchedSeconds += progressData[lecId];
-             if (progressData[lecId] >= 30) {
+             const secVal = Number(progressData[lecId]) || 0;
+             watchedSeconds += secVal;
+             if (secVal >= 30) {
                completedLectures += 1;
              }
           });
@@ -304,14 +305,16 @@ export default function StudentDashboard() {
           if (course.lectures && course.lectures.length > 0) {
             course.lectures.forEach(l => {
               let max = 900;
-              if (l.duration && l.duration.includes('min')) max = (parseInt(l.duration) || 15) * 60;
+              if (l && l.duration && String(l.duration).includes('min')) {
+                max = (parseInt(String(l.duration)) || 15) * 60;
+              }
               estimatedTotalSeconds += max;
             });
           } else {
             estimatedTotalSeconds = totalLectures * 10 * 60;
           }
 
-          const progressPct = Math.min(100, Math.floor((watchedSeconds / estimatedTotalSeconds) * 100));
+          const progressPct = estimatedTotalSeconds > 0 ? Math.min(100, Math.floor((watchedSeconds / estimatedTotalSeconds) * 100)) : 0;
 
           const now = new Date();
           const startOfYear = new Date(now.getFullYear(), 0, 1);
