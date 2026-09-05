@@ -46,20 +46,23 @@ export default function LeadKanbanBoard({
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
 
-  const filteredLeads = leads.filter((l) => {
+  const filteredLeads = (leads || []).filter((l) => {
+    if (!l) return false;
+    const q = (searchTerm || '').toLowerCase().trim();
     // Search
     const matchesSearch =
-      l.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      l.phone?.includes(searchTerm) ||
-      l.email?.toLowerCase().includes(searchTerm.toLowerCase());
+      !q ||
+      String(l.name || '').toLowerCase().includes(q) ||
+      String(l.phone || '').includes(q) ||
+      String(l.email || '').toLowerCase().includes(q);
 
     if (!matchesSearch) return false;
 
     // Rep filter
     if (selectedRepFilter === 'my_leads') {
-      if (l.assigned_to?.toLowerCase() !== currentUser?.email?.toLowerCase()) return false;
+      if (String(l.assigned_to || '').toLowerCase() !== String(currentUser?.email || '').toLowerCase()) return false;
     } else if (selectedRepFilter !== 'all') {
-      if (l.assigned_to?.toLowerCase() !== selectedRepFilter.toLowerCase()) return false;
+      if (String(l.assigned_to || '').toLowerCase() !== String(selectedRepFilter || '').toLowerCase()) return false;
     }
 
     // Due today filter

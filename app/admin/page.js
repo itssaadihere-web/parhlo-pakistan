@@ -623,18 +623,20 @@ export default function AdminDashboard() {
     }, 1200);
   };
 
-  const filteredOffers = salesOffers.filter(offer => {
+  const filteredOffers = (salesOffers || []).filter(offer => {
+    if (!offer) return false;
+    const sQuery = (offerSearch || '').toLowerCase().trim();
     const matchesSearch =
-      !offerSearch ||
-      offer.student_email?.toLowerCase().includes(offerSearch.toLowerCase()) ||
-      offer.course_slug?.toLowerCase().includes(offerSearch.toLowerCase()) ||
-      offer.sales_email?.toLowerCase().includes(offerSearch.toLowerCase());
+      !sQuery ||
+      String(offer.student_email || '').toLowerCase().includes(sQuery) ||
+      String(offer.course_slug || '').toLowerCase().includes(sQuery) ||
+      String(offer.sales_email || '').toLowerCase().includes(sQuery);
 
     const matchesRep =
       offerRepFilter === 'all' ||
       (offerRepFilter === 'admin'
-        ? offer.sales_email?.toLowerCase().includes('admin')
-        : offer.sales_email?.toLowerCase() === offerRepFilter.toLowerCase());
+        ? String(offer.sales_email || '').toLowerCase().includes('admin')
+        : String(offer.sales_email || '').toLowerCase() === (offerRepFilter || '').toLowerCase());
 
     const matchesStatus =
       offerStatusFilter === 'all' ||
@@ -1262,9 +1264,11 @@ export default function AdminDashboard() {
                   <tbody className="divide-y divide-gray-100 text-slate-900 font-medium">
                     {crmLeads
                       .filter(l => {
-                        const matchSearch = l.name?.toLowerCase().includes(crmSearch.toLowerCase()) ||
-                          l.phone?.includes(crmSearch) ||
-                          l.email?.toLowerCase().includes(crmSearch.toLowerCase());
+                        const sQuery = (crmSearch || '').toLowerCase().trim();
+                        const matchSearch = !sQuery ||
+                          String(l.name || '').toLowerCase().includes(sQuery) ||
+                          String(l.phone || '').includes(sQuery) ||
+                          String(l.email || '').toLowerCase().includes(sQuery);
                         if (!matchSearch) return false;
 
                         if (crmRepFilter === 'unassigned') return !l.assigned_to;

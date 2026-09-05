@@ -379,21 +379,30 @@ export default function SalesDashboard() {
     router.push('/');
   };
 
-  const filteredOffers = offers.filter(o => 
-    o.student_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    o.course_slug?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredOffers = (offers || []).filter(o => {
+    if (!o) return false;
+    const q = (searchTerm || '').toLowerCase().trim();
+    return !q ||
+      String(o.student_email || '').toLowerCase().includes(q) ||
+      String(o.course_slug || '').toLowerCase().includes(q);
+  });
 
-  const filteredStudents = students.filter(s =>
-    s.full_name?.toLowerCase().includes(studentSearchTerm.toLowerCase()) ||
-    s.email?.toLowerCase().includes(studentSearchTerm.toLowerCase()) ||
-    s.phone?.includes(studentSearchTerm)
-  );
+  const filteredStudents = (students || []).filter(s => {
+    if (!s) return false;
+    const q = (studentSearchTerm || '').toLowerCase().trim();
+    return !q ||
+      String(s.full_name || '').toLowerCase().includes(q) ||
+      String(s.email || '').toLowerCase().includes(q) ||
+      String(s.phone || '').includes(q);
+  });
 
-  const filteredPurchases = purchases.filter(p =>
-    p.student_email?.toLowerCase().includes(enrollmentSearchTerm.toLowerCase()) ||
-    p.course_slug?.toLowerCase().includes(enrollmentSearchTerm.toLowerCase())
-  );
+  const filteredPurchases = (purchases || []).filter(p => {
+    if (!p) return false;
+    const q = (enrollmentSearchTerm || '').toLowerCase().trim();
+    return !q ||
+      String(p.student_email || '').toLowerCase().includes(q) ||
+      String(p.course_slug || '').toLowerCase().includes(q);
+  });
 
   const menuItems = [
     { name: 'Leads (CRM)', icon: <PhoneCall size={20} />, id: 'leads' },
