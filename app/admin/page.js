@@ -91,6 +91,7 @@ export default function AdminDashboard() {
 
   const [paymentSortKey, setPaymentSortKey] = useState('date');
   const [paymentSortDir, setPaymentSortDir] = useState('desc');
+  const [paymentSearch, setPaymentSearch] = useState('');
 
   const [offerSortKey, setOfferSortKey] = useState('date');
   const [offerSortDir, setOfferSortDir] = useState('desc');
@@ -1181,6 +1182,27 @@ export default function AdminDashboard() {
 
   const pendingApprovals = payments.filter(p => p.status === 'pending' && (p.receiptImage || (p.amountPaid && p.amountPaid > 0)));
   const approvedPayments = payments.filter(p => p.status === 'approved' && isRealPayment(p));
+
+  const filteredApprovedPayments = useMemo(() => {
+    let list = (payments || []).filter(p => p && p.status === 'approved' && isRealPayment(p));
+    if (paymentSearch) {
+      const q = paymentSearch.toLowerCase().trim();
+      list = list.filter(p =>
+        String(p.courseName || '').toLowerCase().includes(q) ||
+        String(p.userEmail || '').toLowerCase().includes(q) ||
+        String(p.transactionId || '').toLowerCase().includes(q)
+      );
+    }
+    list.sort((a, b) => {
+      let res = 0;
+      if (paymentSortKey === 'course') res = String(a.courseName || '').localeCompare(String(b.courseName || ''));
+      else if (paymentSortKey === 'student') res = String(a.userEmail || '').localeCompare(String(b.userEmail || ''));
+      else if (paymentSortKey === 'amount') res = (Number(a.amountPaid !== undefined ? a.amountPaid : (a.coursePrice || 0)) || 0) - (Number(b.amountPaid !== undefined ? b.amountPaid : (b.coursePrice || 0)) || 0);
+      else if (paymentSortKey === 'date') res = new Date(a.created_at || a.date || 0) - new Date(b.created_at || b.date || 0);
+      return paymentSortDir === 'desc' ? -res : res;
+    });
+    return list;
+  }, [payments, paymentSearch, paymentSortKey, paymentSortDir]);
 
   const getEnrollments = () => {
     let studentEmails = [...new Set((payments || []).filter(p => p && ['approved', 'suspended'].includes(p.status)).map(p => p.userEmail).filter(Boolean))];
@@ -2622,66 +2644,133 @@ export default function AdminDashboard() {
             </div>
 
             {approvedPayments.length > 0 && (
-              <div className="mt-16">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                  <h2 className="text-xl font-black text-slate-900">Recently Approved Payments</h2>
-                  <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-medium">
-                    <ArrowUpDown size={14} className="text-gray-400 mr-2 shrink-0" />
-                    <select
-                      value={paymentSort}
-                      onChange={(e) => setPaymentSort(e.target.value)}
-                      className="bg-transparent text-slate-900 font-bold text-xs focus:outline-none cursor-pointer"
-                    >
-                      <option value="newest">Newest Date</option>
-                      <option value="oldest">Oldest Date</option>
-                      <option value="amount_high">Amount: High to Low</option>
-                      <option value="amount_low">Amount: Low to High</option>
-                      <option value="course_asc">Course Name (A-Z)</option>
-                    </select>
+              <div className="mt-16 bg-white rounded-[2rem] border border-gray-100 p-8 shadow-sm">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">Recently Approved Payments ({filteredApprovedPayments.length})</h2>
+                    <p className="text-xs text-gray-400 mt-1">Verified student payment records and enrollments</p>
+                  </div>
+                  
+                  <div className="relative w-full sm:w-72">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={paymentSearch}
+                      onChange={(e) => setPaymentSearch(e.target.value)}
+                      placeholder="Search payments..."
+                      className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                    />
                   </div>
                 </div>
 
-                <div className="bg-white rounded-[2rem] border border-gray-100 p-6">
-                  {[...approvedPayments]
-                    .sort((a, b) => {
-                      if (paymentSort === 'newest') return new Date(b.created_at || b.date || 0) - new Date(a.created_at || a.date || 0);
-                      if (paymentSort === 'oldest') return new Date(a.created_at || a.date || 0) - new Date(b.created_at || b.date || 0);
-                      if (paymentSort === 'amount_high') return (Number(b.amountPaid) || 0) - (Number(a.amountPaid) || 0);
-                      if (paymentSort === 'amount_low') return (Number(a.amountPaid) || 0) - (Number(b.amountPaid) || 0);
-                      if (paymentSort === 'course_asc') return String(a.courseName || '').localeCompare(String(b.courseName || ''));
-                      return 0;
-                    })
-                    .map(payment => (
-                    <div key={payment.id} className="flex justify-between items-center py-4 border-b border-gray-50 last:border-0">
-                      <div>
-                        <p className="font-bold text-gray-900">{payment.courseName}</p>
-                        <p className="text-xs text-gray-500">{payment.userEmail} • TID: {payment.transactionId}</p>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <button
-                          onClick={() => {
-                            const student = students.find(s => s.email === payment.userEmail);
-                            if (student) {
-                              setEditingProfile(student);
-                            } else {
-                              alert('Student profile not found in database.');
-                            }
-                          }}
-                          className="text-xs font-bold text-gray-500 hover:text-gray-900 underline"
-                        >
-                          View Profile
-                        </button>
-                        <button
-                          onClick={() => payment.receiptImage ? setViewingReceipt(payment.receiptImage) : alert('No receipt was attached to this payment.')}
-                          className={`text-xs font-bold underline ${payment.receiptImage ? 'text-blue-600 hover:text-blue-800' : 'text-gray-400 cursor-not-allowed'}`}
-                        >
-                          View Receipt
-                        </button>
-                        <span className="text-xs font-black text-green-600 uppercase tracking-widest bg-green-50 px-3 py-1 rounded-full">Approved</span>
-                      </div>
-                    </div>
-                  ))}
+                <div className="grid grid-cols-12 items-center bg-gray-50/80 px-4 py-3 rounded-xl border border-gray-100 text-xs font-bold uppercase tracking-wider text-gray-500 select-none mb-3">
+                  <div className="col-span-12 md:col-span-4 flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => handlePaymentSort('course')}
+                      className="inline-flex items-center gap-1.5 hover:text-slate-900 transition-colors"
+                    >
+                      <span>Course</span>
+                      {paymentSortKey === 'course' ? (
+                        paymentSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                      ) : (
+                        <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                      )}
+                    </button>
+                  </div>
+                  <div className="hidden md:flex md:col-span-3 items-center">
+                    <button
+                      type="button"
+                      onClick={() => handlePaymentSort('student')}
+                      className="inline-flex items-center gap-1.5 hover:text-slate-900 transition-colors"
+                    >
+                      <span>Student</span>
+                      {paymentSortKey === 'student' ? (
+                        paymentSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                      ) : (
+                        <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                      )}
+                    </button>
+                  </div>
+                  <div className="hidden md:flex md:col-span-2 items-center">
+                    <button
+                      type="button"
+                      onClick={() => handlePaymentSort('amount')}
+                      className="inline-flex items-center gap-1.5 hover:text-slate-900 transition-colors"
+                    >
+                      <span>Amount</span>
+                      {paymentSortKey === 'amount' ? (
+                        paymentSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                      ) : (
+                        <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                      )}
+                    </button>
+                  </div>
+                  <div className="hidden md:flex md:col-span-1 items-center">
+                    <button
+                      type="button"
+                      onClick={() => handlePaymentSort('date')}
+                      className="inline-flex items-center gap-1.5 hover:text-slate-900 transition-colors"
+                    >
+                      <span>Date</span>
+                      {paymentSortKey === 'date' ? (
+                        paymentSortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-600 stroke-[2.5]" /> : <ArrowDown size={12} className="text-emerald-600 stroke-[2.5]" />
+                      ) : (
+                        <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                      )}
+                    </button>
+                  </div>
+                  <div className="hidden md:block md:col-span-2 text-right">
+                    <span>Actions</span>
+                  </div>
                 </div>
+
+                {filteredApprovedPayments.length === 0 ? (
+                  <p className="text-gray-500 italic py-6 text-center text-sm">No matching approved payments found.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredApprovedPayments.map(payment => (
+                      <div key={payment.id} className="grid grid-cols-1 md:grid-cols-12 items-center gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100 hover:border-emerald-200 transition-colors">
+                        <div className="col-span-12 md:col-span-4">
+                          <p className="font-bold text-gray-900">{payment.courseName || 'N/A'}</p>
+                          <p className="text-xs text-gray-500 md:hidden">{payment.userEmail} • TID: {payment.transactionId}</p>
+                        </div>
+                        <div className="hidden md:block md:col-span-3">
+                          <p className="font-medium text-sm text-gray-900 truncate" title={payment.userEmail}>{payment.userEmail}</p>
+                          <p className="text-xs text-gray-400 font-mono">TID: {payment.transactionId}</p>
+                        </div>
+                        <div className="hidden md:block md:col-span-2 font-bold text-sm text-emerald-700">
+                          {formatCurrency(payment.amountPaid !== undefined ? payment.amountPaid : (payment.coursePrice || 0))}
+                        </div>
+                        <div className="hidden md:block md:col-span-1 text-xs text-gray-500">
+                          {payment.date || (payment.created_at ? new Date(payment.created_at).toLocaleDateString() : 'N/A')}
+                        </div>
+                        <div className="col-span-12 md:col-span-2 flex items-center justify-end gap-3">
+                          <button
+                            onClick={() => {
+                              const student = students.find(s => s.email === payment.userEmail);
+                              if (student) {
+                                setEditingProfile(student);
+                              } else {
+                                alert('Student profile not found in database.');
+                              }
+                            }}
+                            className="text-xs font-bold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-full transition-colors"
+                          >
+                            Profile
+                          </button>
+                          <button
+                            onClick={() => payment.receiptImage ? setViewingReceipt(payment.receiptImage) : alert('No receipt was attached to this payment.')}
+                            className={`text-xs font-bold px-3 py-1.5 rounded-full transition-colors ${payment.receiptImage ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                          >
+                            Receipt
+                          </button>
+                          <span className="text-[10px] font-black text-green-600 uppercase tracking-wider bg-green-50 px-2.5 py-1 rounded-full">Approved</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
