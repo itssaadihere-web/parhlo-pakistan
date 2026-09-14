@@ -18,7 +18,12 @@ import {
   CreditCard,
   Upload,
   Star,
-  Users
+  Users,
+  AlertCircle,
+  Copy,
+  Check,
+  Sparkles,
+  ShieldCheck
 } from 'lucide-react';
 
 import { supabase } from '@/utils/supabase';
@@ -41,6 +46,7 @@ export default function DynamicCourseDetail() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [copiedAccount, setCopiedAccount] = useState('');
   
   // Payment Form State
   const [transactionId, setTransactionId] = useState('');
@@ -233,9 +239,29 @@ export default function DynamicCourseDetail() {
   useEffect(() => {
     checkUserAccess();
     
+    // Check if URL specifies auto-opening payment/installment modal
+    if (typeof window !== 'undefined') {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('pay') === 'installment' || urlParams.get('pay') === 'next') {
+          setPaymentMode('installment');
+          setShowPaymentModal(true);
+        }
+      } catch (e) {}
+    }
+
     // Add event listener to re-check when storage changes (e.g. from AuthModal)
     window.addEventListener('storage', checkUserAccess);
-    return () => window.removeEventListener('storage', checkUserAccess);
+
+    // Auto-polling every 5 seconds so when admin approves payment, UI auto-unlocks instantly!
+    const pollInterval = setInterval(() => {
+      checkUserAccess();
+    }, 5000);
+
+    return () => {
+      window.removeEventListener('storage', checkUserAccess);
+      clearInterval(pollInterval);
+    };
   }, [slug]);
 
   useEffect(() => {
@@ -534,9 +560,17 @@ export default function DynamicCourseDetail() {
   };
 
   const openPreview = (index) => {
-    const item = courseData.curriculum[index];
+    const item = courseData?.curriculum?.[index];
+    if (!item) return;
+
+    if (!userEmail) {
+      setShowAuthModal(true);
+      return;
+    }
+
     if (!item.isFree && paymentStatus !== 'approved') {
-      alert("You need to purchase this course to view this lecture.");
+      setPaymentMode('installment');
+      setShowPaymentModal(true);
       return;
     }
 
@@ -573,11 +607,8 @@ export default function DynamicCourseDetail() {
 
       // 1. Check 1-Month Free Access Total Quota (1/3rd limit)
       if (plan === 'free_trial' && totalWatched >= monthlyFreeLimitSeconds) {
-        alert(
-          `🚀 1-Month Free Access Quota Completed!\n\n` +
-          `You have completed your 1-Month Free Access allowance (${Math.round(totalWatched / 60)} min / ${Math.round(monthlyFreeLimitSeconds / 60)} min quota).\n\n` +
-          `Your 1st month free access period is complete! To unlock your remaining course modules for Month 2 & 3, please complete your 1st & 2nd month installment payments in your dashboard.`
-        );
+        setPaymentMode('installment');
+        setShowPaymentModal(true);
         return;
       }
 
@@ -698,6 +729,20 @@ export default function DynamicCourseDetail() {
     );
   }
 
+  const handleCopyAccount = (text, key) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedAccount(key);
+      setTimeout(() => setCopiedAccount(''), 2500);
+    }
+  };
+
+  const calculatedMonthlyDue = purchaseRecord?.monthly_installment_amount || 
+    activeOffer?.custom_installment_amount || 
+    Math.round((courseData?.rawSalePrice || courseData?.rawOriginalPrice || 7000) / 3);
+
+  const installmentNumber = (purchaseRecord?.installments_paid || 1) + 1;
+
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900">
       
@@ -710,15 +755,73 @@ export default function DynamicCourseDetail() {
       />
 
       {showPaymentModal && (
-        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white p-8 md:p-10 rounded-[2.5rem] max-w-4xl w-full relative shadow-2xl border border-gray-100 flex flex-col md:flex-row gap-10 my-8">
-            <button onClick={() => setShowPaymentModal(false)} className="absolute top-6 right-6 md:top-8 md:right-8 text-gray-400 hover:text-gray-900 transition-colors z-10"><X /></button>
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white p-6 md:p-10 rounded-[2.5rem] max-w-4xl w-full relative shadow-2xl border border-gray-100 flex flex-col md:flex-row gap-8 md:gap-10 my-8">
+            <button 
+              onClick={() => setShowPaymentModal(false)} 
+              className="absolute top-6 right-6 md:top-8 md:right-8 text-gray-400 hover:text-gray-900 transition-colors z-10 p-2 rounded-full hover:bg-gray-100"
+            >
+              <X size={20} />
+            </button>
             
             {/* Left Column - Payment Details */}
             <div className="flex-1 border-b md:border-b-0 md:border-r border-gray-100 pb-8 md:pb-0 md:pr-10">
-              <div className="w-14 h-14 bg-green-50 rounded-2xl flex items-center justify-center text-green-600 mb-6"><CreditCard size={28} /></div>
-              
-              {activeOffer && (
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center text-green-600">
+                  <CreditCard size={24} />
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full">
+                    {paymentStatus === 'pending' ? 'Payment Status' : isInstallmentDue ? 'Installment Due' : 'Secure Admission'}
+                  </span>
+                  <h3 className="text-xl md:text-2xl font-black text-slate-900">
+                    {paymentStatus === 'pending' 
+                      ? 'Payment Under Review' 
+                      : isInstallmentDue 
+                        ? `Pay Installment ${Math.min(3, installmentNumber)} of 3` 
+                        : `Get ${courseData.title}`
+                    }
+                  </h3>
+                </div>
+              </div>
+
+              {paymentStatus === 'pending' && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-6 text-amber-900 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-sm text-amber-800">
+                    <Clock size={18} className="animate-spin text-amber-600" /> Receipt Under Admin Verification
+                  </div>
+                  <p className="text-xs text-amber-700/90 leading-relaxed font-medium">
+                    We have received your payment proof! Our admin team is verifying your transaction. Once approved, all lectures and videos will unlock automatically.
+                  </p>
+                  <p className="text-[11px] text-amber-600 font-bold pt-1">
+                    Need to update your receipt screenshot? Upload a new one below:
+                  </p>
+                </div>
+              )}
+
+              {isInstallmentDue && (
+                <div className="bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-amber-50 border border-orange-200 p-5 rounded-2xl mb-6 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-orange-800 flex items-center gap-1.5">
+                      <AlertCircle size={16} className="text-orange-600" /> Next Monthly Installment
+                    </span>
+                    <span className="text-xs font-black text-orange-700 bg-orange-100 px-2.5 py-0.5 rounded-full">
+                      Installment {Math.min(3, installmentNumber)} / 3
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-black font-mono text-slate-900">
+                      Rs. {calculatedMonthlyDue.toLocaleString()}
+                    </span>
+                    <span className="text-xs font-bold text-slate-500">due this month</span>
+                  </div>
+                  <p className="text-xs text-slate-600 font-medium">
+                    Pay the monthly installment to immediately restore video access and continue your curriculum.
+                  </p>
+                </div>
+              )}
+
+              {!isInstallmentDue && paymentStatus !== 'pending' && activeOffer && (
                 <div className="bg-emerald-900 text-white p-5 rounded-2xl mb-6 shadow-lg border border-emerald-500/40 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-500 text-slate-950 px-2.5 py-0.5 rounded-full">
@@ -726,7 +829,7 @@ export default function DynamicCourseDetail() {
                     </span>
                     <span className="text-xs text-emerald-200">Issued by {activeOffer.sales_email}</span>
                   </div>
-                  <h4 className="font-black text-lg text-white">Special Private Offer Just For You!</h4>
+                  <h4 className="font-black text-lg text-white">Special Offer Just For You!</h4>
                   {activeOffer.offer_type === 'independenceday_14' && (
                     <p className="text-xs text-emerald-100">
                       🇵🇰 <strong>14% Independence Day Special Discount Applied!</strong> Discounted Total: <strong>Rs. {activeOffer.custom_total_price?.toLocaleString()}</strong> | Monthly Installment: <strong>Rs. {activeOffer.custom_installment_amount?.toLocaleString()} / mo</strong>
@@ -740,7 +843,7 @@ export default function DynamicCourseDetail() {
                   {activeOffer.offer_type === 'free_month_trial' && (
                     <div className="space-y-3 pt-1">
                       <p className="text-xs text-emerald-100">
-                        Get <strong>1-Month Free Access</strong> with <strong>Rs. 0 initial payment today</strong>. Your 1st installment is delayed to month 2 and will be paid together with your 2nd installment. 
+                        Get <strong>1-Month Free Access</strong> with <strong>Rs. 0 initial payment today</strong>. Your 1st installment is delayed to month 2. 
                       </p>
                       <button
                         onClick={submitFreeTrialActivation}
@@ -758,16 +861,9 @@ export default function DynamicCourseDetail() {
                 </div>
               )}
 
-              {isInstallmentDue ? (
+              {!isInstallmentDue && paymentStatus !== 'pending' && (
                 <>
-                  <h3 className="text-2xl font-black mb-1 text-slate-900">Pay Next Installment</h3>
-                  <p className="text-gray-500 mb-8 text-sm font-medium">Send <span className="font-bold text-gray-900 text-lg">Rs. {Math.round(courseData.rawOriginalPrice / 3).toLocaleString()}</span> to the details below to resume your course.</p>
-                </>
-              ) : (
-                <>
-                  <h3 className="text-2xl font-black mb-1 text-slate-900">Buy {courseData.title}</h3>
-                  
-                  <div className="mb-6 grid grid-cols-2 gap-4 mt-6">
+                  <div className="mb-6 grid grid-cols-2 gap-4">
                     <div 
                       onClick={() => setPaymentMode('full')} 
                       className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${paymentMode === 'full' ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-green-200'}`}
@@ -788,59 +884,94 @@ export default function DynamicCourseDetail() {
                     </div>
                   </div>
 
-                  <p className="text-gray-500 mb-8 text-sm font-medium">
-                    Send <span className="font-bold text-gray-900 text-lg">
+                  <p className="text-gray-500 mb-6 text-xs font-medium">
+                    Send <span className="font-bold text-gray-900">
                       {paymentMode === 'full' 
                         ? ((activeOffer?.offer_type === 'added_discount' || activeOffer?.offer_type === 'independenceday_14') ? formatCurrency(activeOffer.custom_total_price) : courseData.salePrice)
                         : `Rs. ${(activeOffer?.offer_type === 'discounted_installment' || activeOffer?.offer_type === 'independenceday_14') ? activeOffer.custom_installment_amount?.toLocaleString() : Math.round(courseData.rawOriginalPrice / 3).toLocaleString()}`
                       }
-                    </span> to the details below.
+                    </span> to either official account below:
                   </p>
                 </>
               )}
 
-              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200">
-                <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest mb-1">Bank Transfer (Bank Alfalah)</p>
-                <p className="text-lg font-mono text-gray-900 font-bold tracking-tight">55295001809451</p>
-                <p className="text-xs text-gray-400 mt-1">Title: Muhammad Faraz Sohail</p>
+              {/* Bank Transfer Accounts */}
+              <div className="space-y-3">
+                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 relative group">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[10px] text-blue-600 font-black uppercase tracking-widest mb-1">Bank Alfalah (Bank Transfer)</p>
+                      <p className="text-base font-mono text-gray-900 font-bold tracking-tight">55295001809451</p>
+                      <p className="text-xs text-gray-500 mt-0.5 font-medium">Title: Muhammad Faraz Sohail</p>
+                    </div>
+                    <button 
+                      onClick={() => handleCopyAccount('55295001809451', 'bank')}
+                      className="p-2 text-gray-400 hover:text-blue-600 bg-white border border-gray-200 rounded-xl shadow-sm text-xs font-bold flex items-center gap-1 transition-colors"
+                      title="Copy Account Number"
+                    >
+                      {copiedAccount === 'bank' ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                      {copiedAccount === 'bank' ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 relative group">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-[10px] text-emerald-600 font-black uppercase tracking-widest mb-1">EasyPaisa / JazzCash</p>
+                      <p className="text-base font-mono text-gray-900 font-bold tracking-tight">0300-0322301</p>
+                      <p className="text-xs text-gray-500 mt-0.5 font-medium">Title: Parhlo Pakistan</p>
+                    </div>
+                    <button 
+                      onClick={() => handleCopyAccount('03000322301', 'wallet')}
+                      className="p-2 text-gray-400 hover:text-emerald-600 bg-white border border-gray-200 rounded-xl shadow-sm text-xs font-bold flex items-center gap-1 transition-colors"
+                      title="Copy Wallet Number"
+                    >
+                      {copiedAccount === 'wallet' ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                      {copiedAccount === 'wallet' ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Right Column - User Inputs */}
+            {/* Right Column - User Inputs & Receipt Upload */}
             <div className="flex-1 flex flex-col pt-2 md:pt-0">
               <div className="mb-4">
-                <label className="block text-sm font-bold text-gray-700 mb-2">Full Name</label>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">Full Name</label>
                 <input
                   type="text"
                   value={profileName}
                   onChange={(e) => setProfileName(e.target.value)}
                   placeholder="Enter your full name"
-                  className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-green-500 font-medium"
+                  className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-green-500 font-medium text-sm"
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-bold text-gray-700 mb-2">WhatsApp Number</label>
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">WhatsApp Number</label>
                 <input
                   type="text"
                   value={profilePhone}
                   onChange={(e) => setProfilePhone(e.target.value)}
-                  placeholder="Enter your WhatsApp number"
-                  className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-green-500 font-medium"
+                  placeholder="e.g. 03001234567"
+                  className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-green-500 font-medium text-sm"
                 />
               </div>
-              <div className="mb-6">
-                <label className="block text-sm font-bold text-gray-700 mb-2">Transaction ID / TID</label>
+              <div className="mb-4">
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">Transaction ID / TID</label>
                 <input 
                   type="text" 
                   value={transactionId}
                   onChange={(e) => setTransactionId(e.target.value)}
-                  placeholder="e.g. 1234567890"
-                  className="w-full bg-gray-50 border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-green-500 font-medium" 
+                  placeholder="e.g. 1234567890 (from SMS/App)"
+                  className="w-full bg-gray-50 border border-gray-200 p-3.5 rounded-xl outline-none focus:ring-2 focus:ring-green-500 font-medium text-sm" 
                 />
               </div>
 
-              <div className="mb-8 flex-1">
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-2">Upload Receipt Proof</label>
+              <div className="mb-6 flex-1">
+                <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
+                  Upload Payment Screenshot Proof
+                </label>
                 <input 
                   type="file" 
                   accept="image/*" 
@@ -849,22 +980,40 @@ export default function DynamicCourseDetail() {
                   className="hidden" 
                 />
                 <div 
-                  className={`border-2 border-dashed rounded-xl p-4 flex flex-col justify-center text-center cursor-pointer transition-colors overflow-hidden min-h-[100px] ${receiptImage ? 'border-green-500 bg-green-50' : 'border-gray-300 hover:border-gray-400'}`}
+                  className={`border-2 border-dashed rounded-2xl p-5 flex flex-col justify-center text-center cursor-pointer transition-all overflow-hidden min-h-[110px] ${receiptImage ? 'border-green-500 bg-green-50/50' : 'border-gray-300 hover:border-green-400 bg-gray-50/50'}`}
                   onClick={() => fileInputRef.current?.click()}
                 >
                   {receiptImage ? (
                     <div className="flex flex-col items-center">
-                      <CheckCircle2 size={24} className="text-green-600 mb-2"/>
-                      <span className="text-green-600 font-bold text-sm">Receipt Uploaded Successfully</span>
-                      <img src={receiptImage} alt="Receipt preview" className="mt-3 h-16 object-contain rounded-lg border border-green-200" />
+                      <CheckCircle2 size={24} className="text-green-600 mb-1.5"/>
+                      <span className="text-green-700 font-bold text-xs">Payment Screenshot Attached</span>
+                      <img src={receiptImage} alt="Receipt preview" className="mt-2.5 h-20 object-contain rounded-xl border border-green-200 shadow-sm" />
+                      <span className="text-[10px] text-gray-400 mt-1">Click to change screenshot</span>
                     </div>
                   ) : (
-                    <span className="text-gray-500 text-sm font-medium flex flex-col items-center gap-2"><Upload size={20} className="text-gray-400"/> Click to browse & upload receipt</span>
+                    <div className="flex flex-col items-center gap-2 py-2">
+                      <div className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-400 border border-gray-200">
+                        <Upload size={18} />
+                      </div>
+                      <div>
+                        <span className="text-gray-700 text-xs font-bold block">Click to upload payment screenshot</span>
+                        <span className="text-gray-400 text-[11px] font-medium">PNG, JPG, or JPEG</span>
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
 
-              <button onClick={submitPayment} className="w-full bg-gray-900 text-white py-4 rounded-xl font-black hover:bg-green-600 transition-all shadow-xl mt-auto">SUBMIT PAYMENT</button>
+              <button 
+                onClick={submitPayment} 
+                className="w-full bg-[#064e3b] text-white py-4 rounded-2xl font-black text-sm hover:bg-green-700 transition-all shadow-xl shadow-green-900/10 flex items-center justify-center gap-2"
+              >
+                <ShieldCheck size={18} />
+                {isInstallmentDue 
+                  ? `SUBMIT INSTALLMENT PAYMENT (Rs. ${calculatedMonthlyDue.toLocaleString()})`
+                  : 'SUBMIT PAYMENT FOR VERIFICATION'
+                }
+              </button>
             </div>
           </div>
         </div>
@@ -990,12 +1139,15 @@ export default function DynamicCourseDetail() {
                   <CheckCircle2 size={24} /> Course Purchased
                 </button>
               ) : paymentStatus === 'pending' ? (
-                <button disabled className="w-full bg-amber-100 text-amber-800 py-5 rounded-2xl font-black text-lg mb-6 flex justify-center items-center gap-2">
-                  <Clock size={24} /> Payment Pending Approval
+                <button 
+                  onClick={() => setShowPaymentModal(true)} 
+                  className="w-full bg-amber-100 text-amber-900 hover:bg-amber-200 py-5 rounded-2xl font-black text-lg mb-6 flex justify-center items-center gap-2 transition-all cursor-pointer border border-amber-300 shadow-sm"
+                >
+                  <Clock size={24} className="animate-spin text-amber-700" /> Payment Under Review (View)
                 </button>
               ) : isInstallmentDue ? (
-                <button onClick={handleEnrollClick} className="w-full bg-orange-500 text-white py-5 rounded-2xl font-black text-lg hover:bg-orange-600 transition-all shadow-xl shadow-orange-900/10 mb-6">
-                  Pay Next Installment
+                <button onClick={handleEnrollClick} className="w-full bg-orange-500 text-white py-5 rounded-2xl font-black text-lg hover:bg-orange-600 transition-all shadow-xl shadow-orange-900/10 mb-6 flex items-center justify-center gap-2 animate-pulse">
+                  <CreditCard size={20} /> Pay Next Installment
                 </button>
               ) : (
                 <button onClick={handleEnrollClick} className="w-full bg-[#064e3b] text-white py-5 rounded-2xl font-black text-lg hover:bg-green-600 transition-all shadow-xl shadow-green-900/10 mb-6">
@@ -1044,9 +1196,27 @@ export default function DynamicCourseDetail() {
               return (
                 <div
                   key={item.id}
-                  className={`group flex items-start gap-6 p-6 rounded-3xl transition-all duration-300 border ${idx === 0 ? 'bg-gray-50 border-gray-100 shadow-sm' : 'bg-white border-transparent hover:border-gray-100 hover:bg-gray-50/50'}`}
+                  onClick={() => {
+                    if (!hasAccess) {
+                      if (!userEmail) {
+                        setShowAuthModal(true);
+                      } else {
+                        setPaymentMode('installment');
+                        setShowPaymentModal(true);
+                      }
+                    }
+                  }}
+                  className={`group flex items-start gap-6 p-6 rounded-3xl transition-all duration-300 border ${
+                    !hasAccess ? 'cursor-pointer hover:border-orange-200 hover:bg-orange-50/30' : ''
+                  } ${idx === 0 ? 'bg-gray-50 border-gray-100 shadow-sm' : 'bg-white border-transparent hover:border-gray-100 hover:bg-gray-50/50'}`}
                 >
-                  <div className={`mt-1 w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${hasAccess ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400 group-hover:bg-white'}`}>
+                  <div className={`mt-1 w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
+                    hasAccess 
+                      ? 'bg-green-100 text-green-600' 
+                      : isInstallmentDue 
+                        ? 'bg-orange-100 text-orange-600 group-hover:bg-orange-200' 
+                        : 'bg-gray-100 text-gray-400 group-hover:bg-white'
+                  }`}>
                     {hasAccess ? <PlayCircle size={24} /> : <Lock size={20} />}
                   </div>
 
@@ -1064,23 +1234,46 @@ export default function DynamicCourseDetail() {
 
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       if (item.type === 'quiz' && item.url) {
                         if (!hasAccess) {
-                          alert("You need to purchase this course to take this quiz.");
+                          if (!userEmail) setShowAuthModal(true);
+                          else {
+                            setPaymentMode('installment');
+                            setShowPaymentModal(true);
+                          }
                           return;
                         }
                         window.open(item.url, '_blank');
-                      } else if (item.videoId) {
-                        openPreview(idx);
+                      } else {
+                        if (!hasAccess) {
+                          if (!userEmail) setShowAuthModal(true);
+                          else {
+                            setPaymentMode('installment');
+                            setShowPaymentModal(true);
+                          }
+                          return;
+                        }
+                        if (item.videoId) {
+                          openPreview(idx);
+                        }
                       }
                     }}
-                    disabled={(!item.videoId && item.type !== 'quiz') || (item.type === 'quiz' && !item.url) || !hasAccess}
-                    className={`bg-white border px-4 py-1.5 rounded-full text-[10px] font-black uppercase text-gray-900 shadow-sm transition-colors ${hasAccess ? 'border-green-200 hover:border-green-600' : 'border-gray-200'} ${(!item.videoId && item.type !== 'quiz') || (item.type === 'quiz' && !item.url) || !hasAccess ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    disabled={(!item.videoId && item.type !== 'quiz') || (item.type === 'quiz' && !item.url)}
+                    className={`bg-white border px-4 py-1.5 rounded-full text-[10px] font-black uppercase text-gray-900 shadow-sm transition-all ${
+                      hasAccess 
+                        ? 'border-green-200 hover:border-green-600 text-green-700' 
+                        : isInstallmentDue 
+                          ? 'border-orange-300 text-orange-700 bg-orange-50 hover:bg-orange-100' 
+                          : paymentStatus === 'pending'
+                            ? 'border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100'
+                            : 'border-gray-200 hover:border-gray-400'
+                    } ${(!item.videoId && item.type !== 'quiz') || (item.type === 'quiz' && !item.url) ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {item.type === 'quiz' 
-                      ? (!item.url ? 'Unavailable' : hasAccess ? 'Take Quiz' : 'Enroll to Unlock')
-                      : (!item.videoId ? 'Unavailable' : hasAccess ? 'Play Video' : 'Enroll to Unlock')
+                      ? (!item.url ? 'Unavailable' : hasAccess ? 'Take Quiz' : isInstallmentDue ? 'Pay Installment 💳' : paymentStatus === 'pending' ? 'Reviewing ⏳' : 'Enroll to Unlock 🔒')
+                      : (!item.videoId ? 'Unavailable' : hasAccess ? 'Play Video' : isInstallmentDue ? 'Pay Installment 💳' : paymentStatus === 'pending' ? 'Reviewing ⏳' : 'Enroll to Unlock 🔒')
                     }
                   </button>
                 </div>

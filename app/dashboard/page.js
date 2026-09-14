@@ -263,7 +263,7 @@ export default function StudentDashboard() {
         const uniqueCoursesMap = new Map();
         purchasesList.forEach(p => {
           const st = (p.status || '').toLowerCase();
-          if (st !== 'suspended' && st !== 'cancelled' && st !== 'rejected' && p.course_slug) {
+          if (st !== 'cancelled' && st !== 'rejected' && p.course_slug) {
             const slugKey = p.course_slug.trim().toLowerCase();
             const existing = uniqueCoursesMap.get(slugKey);
             if (!existing) {
@@ -372,6 +372,10 @@ export default function StudentDashboard() {
 
           const isFreeTrial = purchase.payment_plan === 'free_trial';
           const isPending = (purchase.status || '').toLowerCase() === 'pending';
+          const isSuspended = (purchase.status || '').toLowerCase() === 'suspended';
+          const isInstallmentDue = (purchase.payment_plan === 'installment' || isFreeTrial || isSuspended) &&
+            (isSuspended || (purchase.next_due_date && new Date(purchase.next_due_date) < new Date()));
+
           const rawPrice = parsePrice(course.price);
           const totalCoursePrice = purchase.total_price || rawPrice;
           const monthlyInst = purchase.monthly_installment_amount || Math.round(totalCoursePrice / 3);
@@ -394,7 +398,9 @@ export default function StudentDashboard() {
             paymentPlan: purchase.payment_plan || 'full',
             isFreeTrial: isFreeTrial,
             isPending: isPending,
-            status: purchase.status || 'approved',
+            isSuspended: isSuspended,
+            isInstallmentDue: isInstallmentDue,
+            status: isInstallmentDue ? 'due' : (purchase.status || 'approved'),
             totalCoursePrice: totalCoursePrice,
             monthlyInstallment: monthlyInst,
             amountPaid: amountPaid,
@@ -590,7 +596,7 @@ export default function StudentDashboard() {
                   {enrolledCourses.map(c => {
                     const isWeeklyQuotaReached = c.paymentPlan !== 'full' && c.weeklyWatchedSec >= c.weeklyLimitSeconds;
                     const isMonthlyFreeTrialEnded = c.isFreeTrial && c.watchedSeconds >= c.oneMonthFreeLimitSeconds;
-                    const isLocked = isWeeklyQuotaReached || isMonthlyFreeTrialEnded;
+                    const isLocked = isWeeklyQuotaReached || isMonthlyFreeTrialEnded || c.isInstallmentDue;
 
                     return (
                       <div key={c.slug} className="bg-slate-900/90 border border-slate-700/80 p-5 rounded-2xl space-y-3">
@@ -602,9 +608,12 @@ export default function StudentDashboard() {
                             </span>
                           </div>
                           <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                            isLocked ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            c.isPending ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                            c.isInstallmentDue ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' :
+                            isLocked ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 
+                            'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                           }`}>
-                            {c.paymentPlan === 'full' ? 'Full Access' : isMonthlyFreeTrialEnded ? 'Month 1 Trial Ended' : isWeeklyQuotaReached ? 'Weekly Quota Met' : 'Active'}
+                            {c.isPending ? 'Pending Review' : c.isInstallmentDue ? 'Installment Due' : c.paymentPlan === 'full' ? 'Full Access' : isMonthlyFreeTrialEnded ? 'Month 1 Trial Ended' : isWeeklyQuotaReached ? 'Weekly Quota Met' : 'Active'}
                           </span>
                         </div>
 
@@ -631,14 +640,25 @@ export default function StudentDashboard() {
                                 </div>
                               </>
                             )}
+
+                            {c.isInstallmentDue && (
+                              <div className="flex justify-between text-slate-300 text-[11px] pt-1 border-t border-slate-800">
+                                <span>Monthly Installment Due:</span>
+                                <span className="font-bold text-orange-400">Rs. {c.monthlyInstallment?.toLocaleString()}</span>
+                              </div>
+                            )}
                           </div>
                         )}
 
                         <div className="flex items-center justify-between text-xs pt-1">
                           <span className="text-slate-400">Total Watched: <strong className="text-white">{c.watchedHours} hrs</strong></span>
-                          <Link href={`/courses/${c.slug}`}>
-                            <button className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-1.5 rounded-lg text-xs transition-colors">
-                              {isMonthlyFreeTrialEnded ? 'Pay to Unlock' : isWeeklyQuotaReached ? 'Weekly Limit Reached' : 'Study Now'}
+                          <Link href={c.isInstallmentDue || c.isPending ? `/courses/${c.slug}?pay=installment` : `/courses/${c.slug}`}>
+                            <button className={`${
+                              c.isInstallmentDue ? 'bg-orange-500 hover:bg-orange-400 text-white animate-pulse' :
+                              c.isPending ? 'bg-amber-500 hover:bg-amber-400 text-slate-950' :
+                              'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                            } font-bold px-4 py-1.5 rounded-lg text-xs transition-colors`}>
+                              {c.isInstallmentDue ? 'Pay Next Installment' : c.isPending ? 'Review Receipt' : isMonthlyFreeTrialEnded ? 'Pay to Unlock' : isWeeklyQuotaReached ? 'Weekly Limit Reached' : 'Study Now'}
                             </button>
                           </Link>
                         </div>
@@ -761,7 +781,13 @@ export default function StudentDashboard() {
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-[10px] uppercase font-black text-gray-400 tracking-widest">{course.category}</span>
                         {course.isPending ? (
-                          <span className="bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-200">Pending Approval</span>
+                          <span className="bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-amber-200 flex items-center gap-1">
+                            <Clock size={10} className="animate-spin" /> Pending Approval
+                          </span>
+                        ) : course.isInstallmentDue ? (
+                          <span className="bg-orange-100 text-orange-800 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-orange-200 animate-pulse">
+                            Installment Due
+                          </span>
                         ) : course.isFreeTrial ? (
                           <span className="bg-purple-100 text-purple-800 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-purple-200">1-Month Free</span>
                         ) : (
@@ -778,9 +804,15 @@ export default function StudentDashboard() {
                         <span className="text-xs font-black text-green-600">{course.progress}%</span>
                       </div>
 
-                      <Link href={`/courses/${course.slug}`}>
-                        <button className="w-full bg-gray-50 text-gray-900 py-3 rounded-xl font-black text-sm hover:bg-green-600 hover:text-white transition-all">
-                          {course.isPending ? 'View Subject Details' : 'Continue Learning'}
+                      <Link href={course.isInstallmentDue || course.isPending ? `/courses/${course.slug}?pay=installment` : `/courses/${course.slug}`}>
+                        <button className={`w-full py-3 rounded-xl font-black text-sm transition-all ${
+                          course.isInstallmentDue 
+                            ? 'bg-orange-500 hover:bg-orange-600 text-white shadow-lg shadow-orange-500/20' 
+                            : course.isPending 
+                              ? 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100' 
+                              : 'bg-gray-50 text-gray-900 hover:bg-green-600 hover:text-white'
+                        }`}>
+                          {course.isInstallmentDue ? 'Pay Next Installment' : course.isPending ? 'View Pending Review' : 'Continue Learning'}
                         </button>
                       </Link>
                     </div>
