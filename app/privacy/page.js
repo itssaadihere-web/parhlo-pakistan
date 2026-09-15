@@ -56,7 +56,7 @@ export default function PrivacyPolicy() {
             <ul className="list-disc pl-6 space-y-2 text-slate-600">
               <li><strong>Personal Details:</strong> Name, Email Address, and Phone/WhatsApp Number submitted during account registration or lead inquiries.</li>
               <li><strong>Learning Progress Data:</strong> Completed lectures, video watch time, and quiz scores tracked via our secure database.</li>
-              <li><strong>Payment Proofs:</strong> Payment receipt screenshots uploaded for manual verification of EasyPaisa, JazzCash, or Bank Transfers.</li>
+              <li><strong>Payment Proofs:</strong> Payment receipt screenshots uploaded for manual verification of EasyPaisa or Bank Transfers.</li>
               <li><strong>Technical Data:</strong> IP address, browser type, device information, and interaction logs for performance monitoring and security.</li>
             </ul>
           </div>

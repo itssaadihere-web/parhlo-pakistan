@@ -918,7 +918,7 @@ export default function DynamicCourseDetail() {
                 <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 relative group">
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="text-[10px] text-emerald-600 font-black uppercase tracking-widest mb-1">EasyPaisa / JazzCash</p>
+                      <p className="text-[10px] text-emerald-600 font-black uppercase tracking-widest mb-1">EasyPaisa</p>
                       <p className="text-base font-mono text-gray-900 font-bold tracking-tight">0300-0322301</p>
                       <p className="text-xs text-gray-500 mt-0.5 font-medium">Title: Parhlo Pakistan</p>
                     </div>

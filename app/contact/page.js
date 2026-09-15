@@ -262,7 +262,7 @@ export default function ContactPage() {
             <div className="bg-white p-6 rounded-2xl border border-slate-200">
               <h4 className="font-bold text-slate-900 text-base mb-2">How do I unlock full course access?</h4>
               <p className="text-slate-600 text-sm font-medium leading-relaxed">
-                After starting your demo lecture, select either Full Payment or Monthly Installments during checkout. Upload your payment screenshot (EasyPaisa, JazzCash, or Bank), and our admin team will approve your access shortly.
+                After starting your demo lecture, select either Full Payment or Monthly Installments during checkout. Upload your payment screenshot (EasyPaisa or Bank), and our admin team will approve your access shortly.
               </p>
             </div>
             <div className="bg-white p-6 rounded-2xl border border-slate-200">

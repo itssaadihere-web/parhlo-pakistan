@@ -120,7 +120,7 @@ export default function ParhloPakistan() {
             <h3 className="text-2xl font-black mb-1 text-slate-900">Get {showPaymentModal.title}</h3>
             <p className="text-gray-500 mb-8 text-sm font-medium">Send <span className="font-bold text-gray-900 text-lg">{formatCurrency(showPaymentModal.price)}</span> to the details below.</p>
             <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 mb-8">
-              <p className="text-[10px] text-green-600 font-black uppercase tracking-widest mb-1">EasyPaisa / JazzCash</p>
+              <p className="text-[10px] text-green-600 font-black uppercase tracking-widest mb-1">EasyPaisa</p>
               <p className="text-xl font-mono text-gray-900 font-bold tracking-tight">03xx-xxxxxxx</p>
               <p className="text-xs text-gray-400 mt-1">Title: Syed Saad</p>
             </div>
@@ -400,7 +400,7 @@ export default function ParhloPakistan() {
           <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
             <h3 className="text-lg font-bold text-gray-900 mb-2">What payment options are available for enrollment?</h3>
             <p className="text-gray-600 text-sm font-medium leading-relaxed">
-              Students can choose between a one-time discounted fee or a 3-month equal installment plan. Payments are accepted via EasyPaisa, JazzCash, or Bank Transfer, verified manually by our admin team.
+              Students can choose between a one-time discounted fee or a 3-month equal installment plan. Payments are accepted via EasyPaisa or Bank Transfer, verified manually by our admin team.
             </p>
           </div>
 

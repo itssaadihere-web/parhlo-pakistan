@@ -67,7 +67,7 @@ export default function TermsOfService() {
             <ul className="list-disc pl-6 space-y-2 text-slate-600 mb-4">
               <li><strong>One-Time Full Payment:</strong> Grants lifetime access to all lectures, quizzes, and certificates associated with the specific course.</li>
               <li><strong>Installment Plans:</strong> If you choose a 3-month equal installment plan, monthly payments must be submitted according to your payment schedule in your student dashboard. Failure to complete subsequent installment payments may result in temporary suspension of course video access.</li>
-              <li><strong>Manual Payment Verification:</strong> Payments submitted via EasyPaisa, JazzCash, or Bank Transfer require manual screenshot verification by our team before course access is granted (typically within 1 to 24 hours).</li>
+              <li><strong>Manual Payment Verification:</strong> Payments submitted via EasyPaisa or Bank Transfer require manual screenshot verification by our team before course access is granted (typically within 1 to 24 hours).</li>
             </ul>
           </div>
 
