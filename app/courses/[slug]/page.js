@@ -890,12 +890,12 @@ export default function DynamicCourseDetail() {
                         ? ((activeOffer?.offer_type === 'added_discount' || activeOffer?.offer_type === 'independenceday_14') ? formatCurrency(activeOffer.custom_total_price) : courseData.salePrice)
                         : `Rs. ${(activeOffer?.offer_type === 'discounted_installment' || activeOffer?.offer_type === 'independenceday_14') ? activeOffer.custom_installment_amount?.toLocaleString() : Math.round(courseData.rawOriginalPrice / 3).toLocaleString()}`
                       }
-                    </span> to either official account below:
+                    </span> to the official account below:
                   </p>
                 </>
               )}
 
-              {/* Bank Transfer Accounts */}
+              {/* Bank Transfer Account */}
               <div className="space-y-3">
                 <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 relative group">
                   <div className="flex justify-between items-start">
@@ -911,24 +911,6 @@ export default function DynamicCourseDetail() {
                     >
                       {copiedAccount === 'bank' ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
                       {copiedAccount === 'bank' ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 relative group">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-[10px] text-emerald-600 font-black uppercase tracking-widest mb-1">EasyPaisa</p>
-                      <p className="text-base font-mono text-gray-900 font-bold tracking-tight">0300-0322301</p>
-                      <p className="text-xs text-gray-500 mt-0.5 font-medium">Title: Parhlo Pakistan</p>
-                    </div>
-                    <button 
-                      onClick={() => handleCopyAccount('03000322301', 'wallet')}
-                      className="p-2 text-gray-400 hover:text-emerald-600 bg-white border border-gray-200 rounded-xl shadow-sm text-xs font-bold flex items-center gap-1 transition-colors"
-                      title="Copy Wallet Number"
-                    >
-                      {copiedAccount === 'wallet' ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
-                      {copiedAccount === 'wallet' ? 'Copied!' : 'Copy'}
                     </button>
                   </div>
                 </div>
